@@ -1,0 +1,74 @@
+.venv/
+node_modules/
+dist/
+build/
+.turbo/
+.parcel-cache/
+
+# Vite / dev
+.vite/
+/.temp
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Env files
+.env
+.env.*.local
+.env.local
+.env.production.local
+.env.test.local
+
+# TypeScript
+*.tsbuildinfo
+
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Tests
+.jest/
+
+# Build outputs
+out/
+dist-*/
+
+# npm
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Storybook
+.cache/
+storybook-static/
+
+# Misc
+*.log
+.parcel-cache/
+.next/
+
+# OneDrive / Dropbox sync folders (avoid syncing build artifacts)
+~$*
+~*.*
+
+# Local OS temp
+*.tmp
+
+# Local configuration
+local.properties
