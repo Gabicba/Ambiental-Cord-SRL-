@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
 import { truckStatuses } from '@/hooks/useTrucks';
+import { useTrucks } from '@/hooks/useTrucks';
 import { useDrivers } from '@/hooks/useDrivers';
 
 export default function TruckNewPage() {
   const navigate = useNavigate();
+  const { createTruck } = useTrucks();
   const { drivers } = useDrivers();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -19,7 +20,7 @@ export default function TruckNewPage() {
   const [insuranceExpiry, setInsuranceExpiry] = useState('');
   const [technicalRevisionExpiry, setTechnicalRevisionExpiry] = useState('');
   const [assignedDriverId, setAssignedDriverId] = useState('');
-  const [status, setStatus] = useState('Active');
+  const [status, setStatus] = useState('activo');
   const [notes, setNotes] = useState('');
 
   const availableDrivers = drivers.filter((d) => d.status === 'Active' || d.status === 'On_Route');
@@ -35,27 +36,21 @@ export default function TruckNewPage() {
     setSaving(true);
     setSaveError(null);
     try {
-      const { error: err } = await supabase.from('trucks').insert({
+      await createTruck({
         plate: plate.toUpperCase(),
-        model,
-        year: parseInt(year) || null,
-        capacity_liters: parseInt(capacityLiters) || 0,
-        vin: vin || null,
-        fuel_type: fuelType,
-        gps_device_id: gpsDeviceId || null,
-        insurance_expiry: insuranceExpiry || null,
-        technical_revision_expiry: technicalRevisionExpiry || null,
-        assigned_driver_id: assignedDriverId || null,
-        status,
-        notes: notes || null,
-        km_total: 0,
-        km_since_maintenance: 0,
+        model: model || undefined,
+        year: year ? parseInt(year) : undefined,
+        capacityLiters: capacityLiters ? parseInt(capacityLiters) : undefined,
+        gpsDeviceId: gpsDeviceId || undefined,
+        assignedDriverId: assignedDriverId || undefined,
+        notes: notes || undefined,
       });
-      if (err) throw err;
       navigate('/trucks');
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Error al guardar');
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

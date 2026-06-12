@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api';
 import { useTrucks, truckStatuses } from '@/hooks/useTrucks';
 import { useDrivers } from '@/hooks/useDrivers';
 
@@ -48,7 +49,7 @@ export default function TruckDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({ plate: '', model: '', year: '', capacity_liters: 0, vin: '', fuel_type: 'Diesel', gps_device_id: '', status: '', assigned_driver_id: '', insurance_expiry: '', technical_revision_expiry: '', notes: '', km_total: 0 });
+  const [editForm, setEditForm] = useState({ plate: '', model: '', year: '', capacity_liters: 0, gps_device_id: '', assigned_driver_id: '', notes: '' });
   const [saving, setSaving] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -72,25 +73,29 @@ export default function TruckDetailPage() {
   const driver = truck.assigned_driver_id ? drivers.find((d) => d.id === truck.assigned_driver_id) : null;
 
   const openEdit = () => {
-    setEditForm({ plate: truck.plate, model: truck.model || '', year: truck.year ? String(truck.year) : '', capacity_liters: truck.capacity_liters, vin: truck.vin || '', fuel_type: truck.fuel_type, gps_device_id: truck.gps_device_id || '', status: truck.status, assigned_driver_id: truck.assigned_driver_id || '', insurance_expiry: truck.insurance_expiry || '', technical_revision_expiry: truck.technical_revision_expiry || '', notes: truck.notes || '', km_total: truck.km_total });
+    setEditForm({ plate: truck.plate, model: truck.model || '', year: truck.year ? String(truck.year) : '', capacity_liters: truck.capacity_liters, gps_device_id: truck.gps_device_id || '', assigned_driver_id: truck.assigned_driver_id || '', notes: truck.notes || '' });
     setShowEditModal(true);
   };
 
   const saveEdit = async () => {
     setSaving(true);
     try {
-      const { error: err } = await supabase.from('trucks').update({
-        plate: editForm.plate, model: editForm.model || null, year: editForm.year ? parseInt(editForm.year) : null,
-        capacity_liters: editForm.capacity_liters, vin: editForm.vin || null, fuel_type: editForm.fuel_type,
-        gps_device_id: editForm.gps_device_id || null, status: editForm.status, assigned_driver_id: editForm.assigned_driver_id || null,
-        insurance_expiry: editForm.insurance_expiry || null, technical_revision_expiry: editForm.technical_revision_expiry || null,
-        notes: editForm.notes || null, km_total: editForm.km_total, updated_at: new Date().toISOString(),
-      }).eq('id', truck.id);
-      if (err) throw err;
-      setTruck({ ...truck, ...editForm, year: editForm.year ? parseInt(editForm.year) : null, updated_at: new Date().toISOString() } as TruckData);
+      const updated = await api.patch<TruckData>(`/trucks/${truck.id}`, {
+        plate: editForm.plate || undefined,
+        model: editForm.model || undefined,
+        year: editForm.year ? parseInt(editForm.year) : undefined,
+        capacityLiters: editForm.capacity_liters || undefined,
+        gpsDeviceId: editForm.gps_device_id || undefined,
+        assignedDriverId: editForm.assigned_driver_id || undefined,
+        notes: editForm.notes || undefined,
+      });
+      setTruck({ ...truck, ...updated });
       setShowEditModal(false);
-    } catch (e) { alert(e instanceof Error ? e.message : 'Error'); }
-    finally { setSaving(false); }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al guardar');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDeactivate = async () => {
@@ -108,7 +113,11 @@ export default function TruckDetailPage() {
       <div className="flex items-start justify-between">
         <div>
           <button type="button" onClick={() => navigate('/trucks')} className="text-xs text-text-secondary hover:text-brand-primary transition-colors mb-2">← Volver a Camiones</button>
-          <div className="flex items-center gap-3 flex-wrap"><h1 className="text-2xl font-bold text-text-primary">{truck.plate}</h1><span className={'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ' + (statusCfg?.color || '')}><span className={'w-1.5 h-1.5 rounded-full ' + (truck.status === 'Active' ? 'bg-emerald-500' : truck.status === 'On_Route' ? 'bg-blue-500' : truck.status === 'Maintenance' ? 'bg-amber-500' : 'bg-gray-500')} />{statusCfg?.label}</span></div>
+          <div className="flex items-center gap-3 flex-wrap"><h1 className="text-2xl font-bold text-text-primary">{truck.plate}</h1><span className={'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ' + (statusCfg?.color || '')}><span className={'w-1.5 h-1.5 rounded-full ' + (
+                    truck.status === 'activo'            ? 'bg-emerald-500' :
+                    truck.status === 'en_recorrido'      ? 'bg-blue-500' :
+                    'bg-gray-500'
+                  )} />{statusCfg?.label}</span></div>
           <p className="text-sm text-text-secondary mt-1">{truck.model}</p>
         </div>
         <div className="flex gap-2">
@@ -188,11 +197,8 @@ export default function TruckDetailPage() {
             <div className="p-5 space-y-4">
               <div><label className={labelCls}>Patente *</label><input type="text" value={editForm.plate} onChange={(e) => setEditForm((f) => ({ ...f, plate: e.target.value.toUpperCase() }))} className={inputCls} /></div>
               <div className="grid grid-cols-2 gap-4"><div><label className={labelCls}>Modelo</label><input type="text" value={editForm.model} onChange={(e) => setEditForm((f) => ({ ...f, model: e.target.value }))} className={inputCls} /></div><div><label className={labelCls}>Anio</label><input type="number" value={editForm.year} onChange={(e) => setEditForm((f) => ({ ...f, year: e.target.value }))} className={inputCls} /></div></div>
-              <div className="grid grid-cols-2 gap-4"><div><label className={labelCls}>Capacidad (L)</label><input type="number" value={editForm.capacity_liters} onChange={(e) => setEditForm((f) => ({ ...f, capacity_liters: parseInt(e.target.value) || 0 }))} className={inputCls} /></div><div><label className={labelCls}>Kilometraje Total</label><input type="number" value={editForm.km_total} onChange={(e) => setEditForm((f) => ({ ...f, km_total: parseInt(e.target.value) || 0 }))} className={inputCls} /></div></div>
-              <div><label className={labelCls}>VIN</label><input type="text" value={editForm.vin} onChange={(e) => setEditForm((f) => ({ ...f, vin: e.target.value }))} className={inputCls} /></div>
-              <div><label className={labelCls}>Estado</label><select value={editForm.status} onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))} className={selectCls}>{Object.entries(truckStatuses).map(([k, v]) => (<option key={k} value={k}>{v.label}</option>))}</select></div>
-              <div><label className={labelCls}>Conductor</label><select value={editForm.assigned_driver_id} onChange={(e) => setEditForm((f) => ({ ...f, assigned_driver_id: e.target.value }))} className={selectCls}><option value="">Sin asignar</option>{drivers.filter((d) => d.status === 'Active' || d.status === 'On_Route').map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}</select></div>
-              <div className="grid grid-cols-2 gap-4"><div><label className={labelCls}>Vto. Seguro</label><input type="date" value={editForm.insurance_expiry} onChange={(e) => setEditForm((f) => ({ ...f, insurance_expiry: e.target.value }))} className={inputCls} /></div><div><label className={labelCls}>Vto. RTO</label><input type="date" value={editForm.technical_revision_expiry} onChange={(e) => setEditForm((f) => ({ ...f, technical_revision_expiry: e.target.value }))} className={inputCls} /></div></div>
+              <div className="grid grid-cols-2 gap-4"><div><label className={labelCls}>Capacidad (L)</label><input type="number" value={editForm.capacity_liters} onChange={(e) => setEditForm((f) => ({ ...f, capacity_liters: parseInt(e.target.value) || 0 }))} className={inputCls} /></div><div><label className={labelCls}>ID GPS</label><input type="text" value={editForm.gps_device_id} onChange={(e) => setEditForm((f) => ({ ...f, gps_device_id: e.target.value }))} className={inputCls} /></div></div>
+              <div><label className={labelCls}>Conductor</label><select value={editForm.assigned_driver_id} onChange={(e) => setEditForm((f) => ({ ...f, assigned_driver_id: e.target.value }))} className={selectCls}><option value="">Sin asignar</option>{drivers.filter((d) => d.status === 'activo').map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}</select></div>
               <div><label className={labelCls}>Observaciones</label><textarea value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} rows={3} maxLength={500} className={inputCls + ' resize-none'} /></div>
             </div>
             <div className="p-5 border-t border-brand-border/60 flex items-center justify-end gap-3"><button type="button" onClick={() => setShowEditModal(false)} className="px-4 py-2 rounded-lg border border-brand-border text-sm font-medium text-text-secondary hover:bg-brand-light transition-colors whitespace-nowrap">Cancelar</button><button type="button" onClick={saveEdit} disabled={saving || !editForm.plate} className={'px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors whitespace-nowrap ' + (saving || !editForm.plate ? 'bg-gray-300 cursor-not-allowed' : 'bg-brand-green hover:bg-brand-green/90')}>{saving ? 'Guardando...' : 'Guardar Cambios'}</button></div>
