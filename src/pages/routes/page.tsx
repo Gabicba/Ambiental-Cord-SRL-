@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useRouteSheets, routeStatuses } from '@/hooks/useRouteSheets';
 
-type FilterStatus = 'all' | 'Pending' | 'In_Progress' | 'Completed' | 'Canceled';
+type FilterStatus = 'all' | 'pendiente' | 'en_curso' | 'finalizada' | 'cancelada';
 
 export default function RoutesPage() {
   const navigate = useNavigate();
@@ -48,11 +48,11 @@ export default function RoutesPage() {
   });
 
   const filterButtons: { key: FilterStatus; label: string }[] = [
-    { key: 'all', label: 'Todas' },
-    { key: 'Pending', label: 'Pendientes' },
-    { key: 'In_Progress', label: 'En Progreso' },
-    { key: 'Completed', label: 'Completadas' },
-    { key: 'Canceled', label: 'Canceladas' },
+    { key: 'all',        label: 'Todas' },
+    { key: 'pendiente',  label: 'Pendientes' },
+    { key: 'en_curso',   label: 'En Progreso' },
+    { key: 'finalizada', label: 'Completadas' },
+    { key: 'cancelada',  label: 'Canceladas' },
   ];
 
   return (
@@ -147,9 +147,9 @@ export default function RoutesPage() {
                     <td className="px-5 py-3">
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${statusConfig?.color}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${
-                          route.status === 'Completed' ? 'bg-emerald-500' :
-                          route.status === 'In_Progress' ? 'bg-blue-500' :
-                          route.status === 'Pending' ? 'bg-amber-500' :
+                          route.status === 'finalizada' ? 'bg-emerald-500' :
+                          route.status === 'en_curso'   ? 'bg-blue-500' :
+                          route.status === 'pendiente'  ? 'bg-amber-500' :
                           'bg-red-500'
                         }`} />
                         {statusConfig?.label}

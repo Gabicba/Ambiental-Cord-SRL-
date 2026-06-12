@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api';
 
 export interface RouteSheet {
   id: string;
@@ -20,10 +21,10 @@ export interface RouteSheet {
 }
 
 export const routeStatuses = {
-  Pending: { label: 'Pendiente', color: 'bg-amber-100 text-amber-700 border-amber-200' },
-  In_Progress: { label: 'En Progreso', color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  Completed: { label: 'Completada', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-  Canceled: { label: 'Cancelada', color: 'bg-red-100 text-red-700 border-red-200' },
+  pendiente:  { label: 'Pendiente',   color: 'bg-amber-100 text-amber-700 border-amber-200' },
+  en_curso:   { label: 'En Progreso', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  finalizada: { label: 'Finalizada',  color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  cancelada:  { label: 'Cancelada',   color: 'bg-red-100 text-red-700 border-red-200' },
 };
 
 export function useRouteSheets() {
@@ -75,19 +76,32 @@ export function useRouteSheets() {
 
   useEffect(() => { fetchRoutes(); }, [fetchRoutes]);
 
-  const createRoute = useCallback(async (route: Record<string, unknown>) => {
-    const { data, error: err } = await supabase.from('route_sheets').insert(route).select().single();
-    if (err) throw err;
-    setRoutes(prev => [data as RouteSheet, ...prev]);
-    return data as RouteSheet;
+  const createRoute = useCallback(async (route: {
+    name: string;
+    date: string;
+    truckId: string;
+    driverId: string;
+    companionId?: string;
+  }) => {
+    const data = await api.post<RouteSheet>('/route-sheets', route);
+    setRoutes(prev => [data, ...prev]);
+    return data;
   }, []);
 
-  const updateRoute = useCallback(async (id: string, updates: Partial<RouteSheet>) => {
-    const { data, error: err } = await supabase.from('route_sheets').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id).select().single();
-    if (err) throw err;
-    setRoutes(prev => prev.map(r => r.id === id ? (data as RouteSheet) : r));
-    return data as RouteSheet;
+  const startRoute = useCallback(async (id: string) => {
+    await api.patch(`/route-sheets/${id}/start`);
+    setRoutes(prev => prev.map(r => r.id === id ? { ...r, status: 'en_curso' } : r));
   }, []);
 
-  return { routes, loading, error, refetch: fetchRoutes, createRoute, updateRoute };
+  const cancelRoute = useCallback(async (id: string) => {
+    await api.patch(`/route-sheets/${id}/cancel`);
+    setRoutes(prev => prev.map(r => r.id === id ? { ...r, status: 'cancelada' } : r));
+  }, []);
+
+  const forceCloseRoute = useCallback(async (id: string) => {
+    const data = await api.patch<RouteSheet>(`/route-sheets/${id}/force-close`);
+    setRoutes(prev => prev.map(r => r.id === id ? data : r));
+  }, []);
+
+  return { routes, loading, error, refetch: fetchRoutes, createRoute, startRoute, cancelRoute, forceCloseRoute };
 }

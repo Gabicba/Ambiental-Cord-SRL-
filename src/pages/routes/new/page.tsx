@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api';
 import { useTrucks } from '@/hooks/useTrucks';
 import { useDrivers } from '@/hooks/useDrivers';
 import { useCustomers } from '@/hooks/useCustomers';
@@ -36,18 +36,33 @@ export default function RouteNewPage() {
 
   const handleSave = async () => {
     if (!isValid) return;
-    setSaving(true); setSaveError(null);
+    setSaving(true);
+    setSaveError(null);
     try {
-      const { data: route, error: routeErr } = await supabase.from('route_sheets').insert({ name, date, truck_id: truckId, driver_id: driverId, companion_id: companionId || null, status: 'Pending' }).select().single();
-      if (routeErr) throw routeErr;
-      const visitRows = selectedCustomers.map((cid, idx) => ({ route_id: route.id, customer_id: cid, visit_order: idx + 1, status: 'Pending' }));
-      if (visitRows.length > 0) {
-        const { error: vErr } = await supabase.from('route_visits').insert(visitRows);
-        if (vErr) throw vErr;
-      }
+      const route = await api.post<{ id: string }>('/route-sheets', {
+        name,
+        date,
+        truckId,
+        driverId,
+        companionId: companionId || undefined,
+      });
+
+      await Promise.all(
+        selectedCustomers.map((customerId, idx) =>
+          api.post('/route-visits', {
+            routeId: route.id,
+            customerId,
+            visitOrder: idx + 1,
+          }),
+        ),
+      );
+
       navigate('/routes');
-    } catch (e) { setSaveError(e instanceof Error ? e.message : 'Error'); }
-    finally { setSaving(false); }
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Error al crear la ruta');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

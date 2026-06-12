@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
 
 interface RouteData { id: string; name: string; date: string; truck_id: string | null; driver_id: string | null; companion_id: string | null; status: string; }
 interface VisitData { id: string; route_id: string; customer_id: string; visit_order: number; status: string; liters_collected: number; payment_amount: number; }
@@ -16,10 +18,10 @@ const visitStatusConfig: Record<string, { label: string; color: string; dot: str
 };
 
 const routeStatuses: Record<string, { label: string; color: string }> = {
-  Pending: { label: 'Pendiente', color: 'bg-amber-100 text-amber-700 border-amber-200' },
-  In_Progress: { label: 'En Progreso', color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  Completed: { label: 'Completada', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-  Canceled: { label: 'Cancelada', color: 'bg-red-100 text-red-700 border-red-200' },
+  pendiente:  { label: 'Pendiente',   color: 'bg-amber-100 text-amber-700 border-amber-200' },
+  en_curso:   { label: 'En Progreso', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  finalizada: { label: 'Finalizada',  color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  cancelada:  { label: 'Cancelada',   color: 'bg-red-100 text-red-700 border-red-200' },
 };
 
 export default function RouteDetailPage() {
@@ -33,6 +35,7 @@ export default function RouteDetailPage() {
   const [companion, setCompanion] = useState<CompanionSimple | null>(null);
   const [customers, setCustomers] = useState<Record<string, CustomerSimple>>({});
   const [error, setError] = useState<string | null>(null);
+  const { isAdmin } = useAuth();
 
   const fetchData = useCallback(async () => {
     if (!id) return;
@@ -67,18 +70,32 @@ export default function RouteDetailPage() {
   if (loading) return (<div className="flex items-center justify-center py-20"><div className="w-10 h-10 border-4 border-brand-primary/20 border-t-brand-primary rounded-full animate-spin" /></div>);
   if (error || !route) return (<div className="min-h-[60vh] flex flex-col items-center justify-center"><i className="ri-route-line text-3xl text-text-muted mb-4" /><h2 className="text-lg font-semibold">Ruta no encontrada</h2><button onClick={() => navigate('/routes')} className="mt-4 px-4 py-2 bg-brand-primary text-white rounded-lg text-sm">Volver</button></div>);
 
-  const statusCfg = routeStatuses[route.status] || routeStatuses.Pending;
+  const statusCfg = routeStatuses[route.status] || routeStatuses.pendiente;
   const completedCount = visits.filter((v) => v.status === 'Visited').length;
   const progress = visits.length > 0 ? Math.round((completedCount / visits.length) * 100) : 0;
   const totalLiters = visits.reduce((s, v) => s + (v.liters_collected || 0), 0);
   const totalPayments = visits.reduce((s, v) => s + (v.payment_amount || 0), 0);
 
   const updateStatus = async (status: string) => {
-    try { await supabase.from('route_sheets').update({ status }).eq('id', route.id); setRoute({ ...route, status }); }
-    catch (e) { alert(e instanceof Error ? e.message : 'Error'); }
+    try {
+      if (status === 'en_curso') {
+        await api.patch(`/route-sheets/${route.id}/start`);
+      } else if (status === 'cancelada') {
+        await api.patch(`/route-sheets/${route.id}/cancel`);
+      } else if (status === 'finalizada') {
+        await api.patch(`/route-sheets/${route.id}/force-close`);
+      }
+      setRoute({ ...route, status });
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al actualizar estado');
+    }
   };
 
-  const statusBtns = [{ s: 'Pending', l: 'Pendiente' }, { s: 'In_Progress', l: 'Iniciar' }, { s: 'Completed', l: 'Completar' }, { s: 'Canceled', l: 'Cancelar' }];
+  const statusBtns = [
+    ...(!isAdmin ? [{ s: 'en_curso', l: 'Iniciar' }] : []),
+    { s: 'finalizada', l: 'Forzar cierre' },
+    { s: 'cancelada',  l: 'Cancelar' },
+  ];
 
   return (
     <div className="space-y-6">
