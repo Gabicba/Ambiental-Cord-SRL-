@@ -96,10 +96,8 @@ export default function DriversPage() {
                     <td className="px-5 py-3">
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${statusConfig?.color}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${
-                          driver.status === 'Active' ? 'bg-emerald-500' :
-                          driver.status === 'On_Route' ? 'bg-blue-500' :
-                          'bg-gray-500'
-                        }`} />
+                            driver.status === 'activo' ? 'bg-emerald-500' : 'bg-gray-500'
+                          }`} />
                         {statusConfig?.label}
                       </span>
                     </td>

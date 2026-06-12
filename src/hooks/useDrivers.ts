@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api';
 
 export interface Driver {
   id: string;
@@ -24,9 +25,8 @@ export interface Driver {
 }
 
 export const driverStatuses = {
-  Active: { label: 'Activo', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-  Inactive: { label: 'Inactivo', color: 'bg-gray-100 text-gray-700 border-gray-200' },
-  On_Route: { label: 'En Ruta', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  activo:   { label: 'Activo',   color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  inactivo: { label: 'Inactivo', color: 'bg-gray-100 text-gray-700 border-gray-200' },
 };
 
 export function useDrivers() {
@@ -43,7 +43,6 @@ export function useDrivers() {
         .select('*')
         .is('deleted_at', null)
         .order('name');
-
       if (err) throw err;
       setDrivers((data as Driver[]) || []);
     } catch (e) {
@@ -55,23 +54,42 @@ export function useDrivers() {
 
   useEffect(() => { fetchDrivers(); }, [fetchDrivers]);
 
-  const createDriver = useCallback(async (driver: Omit<Driver, 'id' | 'created_at' | 'updated_at' | 'deleted_at'>) => {
-    const { data, error: err } = await supabase.from('drivers').insert(driver).select().single();
-    if (err) throw err;
-    setDrivers(prev => [data as Driver, ...prev]);
-    return data as Driver;
+  const createDriver = useCallback(async (dto: {
+    name: string;
+    phone?: string;
+    dni?: string;
+    licenseType?: string;
+    licenseNumber?: string;
+    licenseExpiry?: string;
+    email?: string;
+    joinedAt?: string;
+    birthDate?: string;
+    address?: string;
+    emergencyContact?: Record<string, unknown>;
+    assignedTruckId?: string;
+    notes?: string;
+  }) => {
+    const data = await api.post<Driver>('/drivers', dto);
+    setDrivers(prev => [data, ...prev]);
+    return data;
   }, []);
 
-  const updateDriver = useCallback(async (id: string, updates: Partial<Driver>) => {
-    const { data, error: err } = await supabase.from('drivers').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id).select().single();
-    if (err) throw err;
-    setDrivers(prev => prev.map(d => d.id === id ? (data as Driver) : d));
-    return data as Driver;
+  const updateDriver = useCallback(async (id: string, dto: {
+    name?: string;
+    phone?: string;
+    dni?: string;
+    email?: string;
+    address?: string;
+    assignedTruckId?: string;
+    notes?: string;
+  }) => {
+    const data = await api.patch<Driver>(`/drivers/${id}`, dto);
+    setDrivers(prev => prev.map(d => d.id === id ? data : d));
+    return data;
   }, []);
 
   const deleteDriver = useCallback(async (id: string) => {
-    const { error: err } = await supabase.from('drivers').update({ deleted_at: new Date().toISOString() }).eq('id', id);
-    if (err) throw err;
+    await api.delete(`/drivers/${id}`);
     setDrivers(prev => prev.filter(d => d.id !== id));
   }, []);
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api';
 import { useDrivers, driverStatuses } from '@/hooks/useDrivers';
 import { useTrucks } from '@/hooks/useTrucks';
 
@@ -109,12 +110,22 @@ export default function DriverDetailPage() {
   const saveEdit = async () => {
     setSaving(true);
     try {
-      const { error: err } = await supabase.from('drivers').update({ ...editForm, updated_at: new Date().toISOString() }).eq('id', driver.id);
-      if (err) throw err;
-      setDriver({ ...driver, ...editForm, updated_at: new Date().toISOString() } as DriverData);
+      const updated = await api.patch<DriverData>(`/drivers/${driver.id}`, {
+        name: editForm.name || undefined,
+        phone: editForm.phone || undefined,
+        dni: editForm.dni || undefined,
+        email: editForm.email || undefined,
+        address: editForm.address || undefined,
+        assignedTruckId: editForm.assigned_truck_id || undefined,
+        notes: editForm.notes || undefined,
+      });
+      setDriver({ ...driver, ...updated });
       setShowEditModal(false);
-    } catch (e) { alert(e instanceof Error ? e.message : 'Error'); }
-    finally { setSaving(false); }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al guardar');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDeactivate = async () => {
@@ -136,7 +147,7 @@ export default function DriverDetailPage() {
             <button type="button" onClick={() => navigate('/drivers')} className="text-xs text-text-secondary hover:text-brand-primary transition-colors mb-1">← Volver a Conductores</button>
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-2xl font-bold text-text-primary">{driver.name}</h1>
-              <span className={'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ' + (statusCfg?.color || '')}><span className={'w-1.5 h-1.5 rounded-full ' + (driver.status === 'Active' ? 'bg-emerald-500' : driver.status === 'On_Route' ? 'bg-blue-500' : 'bg-gray-500')} />{statusCfg?.label}</span>
+              <span className={'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ' + (statusCfg?.color || '')}><span className={'w-1.5 h-1.5 rounded-full ' + (driver.status === 'activo' ? 'bg-emerald-500' : 'bg-gray-500')} />{statusCfg?.label}</span>
             </div>
             <div className="flex items-center gap-3 text-xs text-text-muted mt-1"><span>DNI: {driver.dni}</span><span>·</span><span>Licencia: {driver.license_type}</span><span>·</span><span>Desde: {driver.joined_at ? new Date(driver.joined_at).toLocaleDateString('es-AR') : '—'}</span></div>
           </div>
@@ -236,7 +247,7 @@ export default function DriverDetailPage() {
               <div><label className={labelCls}>Direccion</label><input type="text" value={editForm.address} onChange={(e) => setEditForm((f) => ({ ...f, address: e.target.value }))} className={inputCls} /></div>
               <div className="grid grid-cols-2 gap-4">
                 <div><label className={labelCls}>Estado</label><select value={editForm.status} onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))} className={selectCls}>{Object.entries(driverStatuses).map(([k, v]) => (<option key={k} value={k}>{v.label}</option>))}</select></div>
-                <div><label className={labelCls}>Camion</label><select value={editForm.assigned_truck_id} onChange={(e) => setEditForm((f) => ({ ...f, assigned_truck_id: e.target.value }))} className={selectCls}><option value="">Sin asignar</option>{trucks.filter((t) => t.status === 'Active' || t.status === 'On_Route').map((t) => (<option key={t.id} value={t.id}>{t.plate}</option>))}</select></div>
+                <div><label className={labelCls}>Camion</label><select value={editForm.assigned_truck_id} onChange={(e) => setEditForm((f) => ({ ...f, assigned_truck_id: e.target.value }))} className={selectCls}><option value="">Sin asignar</option>{trucks.filter((t) => t.status === 'activo' || t.status === 'en_recorrido').map((t) => (<option key={t.id} value={t.id}>{t.plate}</option>))}</select></div>
               </div>
               <div><label className={labelCls}>Observaciones</label><textarea value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} rows={3} maxLength={500} className={inputCls + ' resize-none'} /></div>
             </div>

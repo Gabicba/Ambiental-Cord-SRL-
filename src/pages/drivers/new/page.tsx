@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
 import { driverStatuses } from '@/hooks/useDrivers';
 import { useTrucks } from '@/hooks/useTrucks';
 import { useDrivers } from '@/hooks/useDrivers';
@@ -8,7 +7,7 @@ import { useDrivers } from '@/hooks/useDrivers';
 export default function DriverNewPage() {
   const navigate = useNavigate();
   const { trucks } = useTrucks();
-  const { drivers } = useDrivers();
+  const { drivers, createDriver } = useDrivers();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -23,7 +22,7 @@ export default function DriverNewPage() {
   const [licenseNumber, setLicenseNumber] = useState('');
   const [licenseIssueDate, setLicenseIssueDate] = useState('');
   const [licenseExpiry, setLicenseExpiry] = useState('');
-  const [status, setStatus] = useState('Active');
+  const [status, setStatus] = useState('activo');
   const [assignedTruckId, setAssignedTruckId] = useState('');
   const [emergencyName, setEmergencyName] = useState('');
   const [emergencyPhone, setEmergencyPhone] = useState('');
@@ -38,7 +37,9 @@ export default function DriverNewPage() {
 
   const statusOptions = Object.entries(driverStatuses).map(([key, config]) => ({ value: key, label: config.label }));
 
-  const availableTrucks = trucks.filter((t) => t.status === 'Active' || t.status === 'On_Route');
+  const availableTrucks = trucks.filter((t) =>
+    t.status === 'activo' || t.status === 'en_recorrido'
+  );
   const assignedTruckIds = new Set(drivers.filter((d) => d.assigned_truck_id).map((d) => d.assigned_truck_id));
   const freeTrucks = availableTrucks.filter((t) => !assignedTruckIds.has(t.id));
 
@@ -47,25 +48,25 @@ export default function DriverNewPage() {
     setSaving(true);
     setSaveError(null);
     try {
-      const emergencyContact = emergencyName ? { name: emergencyName, phone: emergencyPhone, relation: emergencyRelation } : null;
-      const { error: err } = await supabase.from('drivers').insert({
+      const emergencyContact = emergencyName
+        ? { name: emergencyName, phone: emergencyPhone, relation: emergencyRelation }
+        : undefined;
+
+      await createDriver({
         name: fullName,
-        phone,
-        dni,
-        license_type: licenseType,
-        license_number: licenseNumber,
-        license_expiry: licenseExpiry || null,
-        license_issue_date: licenseIssueDate || null,
-        status,
-        assigned_truck_id: assignedTruckId || null,
-        email: email || null,
-        joined_at: joinedAt,
-        birth_date: birthDate || null,
-        address: address || null,
-        emergency_contact: emergencyContact,
-        notes: notes || null,
+        phone: phone || undefined,
+        dni: dni || undefined,
+        licenseType: licenseType || undefined,
+        licenseNumber: licenseNumber || undefined,
+        licenseExpiry: licenseExpiry || undefined,
+        email: email || undefined,
+        joinedAt: joinedAt || undefined,
+        birthDate: birthDate || undefined,
+        address: address || undefined,
+        emergencyContact,
+        assignedTruckId: assignedTruckId || undefined,
+        notes: notes || undefined,
       });
-      if (err) throw err;
       navigate('/drivers');
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Error al guardar conductor');
