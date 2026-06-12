@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api';
 
 export interface Truck {
   id: string;
@@ -10,14 +11,6 @@ export interface Truck {
   status: string;
   capacity_liters: number;
   year: number | null;
-  last_maintenance: string | null;
-  next_maintenance: string | null;
-  km_total: number;
-  km_since_maintenance: number;
-  vin: string | null;
-  fuel_type: string;
-  insurance_expiry: string | null;
-  technical_revision_expiry: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -25,10 +18,9 @@ export interface Truck {
 }
 
 export const truckStatuses = {
-  Active: { label: 'Activo', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-  Maintenance: { label: 'Mantenimiento', color: 'bg-amber-100 text-amber-700 border-amber-200' },
-  Stopped: { label: 'Detenido', color: 'bg-gray-100 text-gray-700 border-gray-200' },
-  On_Route: { label: 'En Ruta', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  activo:            { label: 'Activo',            color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  en_recorrido:      { label: 'En Ruta',            color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  fuera_de_servicio: { label: 'Fuera de Servicio',  color: 'bg-gray-100 text-gray-700 border-gray-200' },
 };
 
 export function useTrucks() {
@@ -57,23 +49,36 @@ export function useTrucks() {
 
   useEffect(() => { fetchTrucks(); }, [fetchTrucks]);
 
-  const createTruck = useCallback(async (truck: Omit<Truck, 'id' | 'created_at' | 'updated_at' | 'deleted_at'>) => {
-    const { data, error: err } = await supabase.from('trucks').insert(truck).select().single();
-    if (err) throw err;
-    setTrucks(prev => [data as Truck, ...prev]);
-    return data as Truck;
+  const createTruck = useCallback(async (dto: {
+    plate: string;
+    model?: string;
+    year?: number;
+    capacityLiters?: number;
+    gpsDeviceId?: string;
+    assignedDriverId?: string;
+    notes?: string;
+  }) => {
+    const data = await api.post<Truck>('/trucks', dto);
+    setTrucks(prev => [data, ...prev]);
+    return data;
   }, []);
 
-  const updateTruck = useCallback(async (id: string, updates: Partial<Truck>) => {
-    const { data, error: err } = await supabase.from('trucks').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id).select().single();
-    if (err) throw err;
-    setTrucks(prev => prev.map(t => t.id === id ? (data as Truck) : t));
-    return data as Truck;
+  const updateTruck = useCallback(async (id: string, dto: {
+    plate?: string;
+    model?: string;
+    year?: number;
+    capacityLiters?: number;
+    gpsDeviceId?: string;
+    assignedDriverId?: string;
+    notes?: string;
+  }) => {
+    const data = await api.patch<Truck>(`/trucks/${id}`, dto);
+    setTrucks(prev => prev.map(t => t.id === id ? data : t));
+    return data;
   }, []);
 
   const deleteTruck = useCallback(async (id: string) => {
-    const { error: err } = await supabase.from('trucks').update({ deleted_at: new Date().toISOString() }).eq('id', id);
-    if (err) throw err;
+    await api.delete(`/trucks/${id}`);
     setTrucks(prev => prev.filter(t => t.id !== id));
   }, []);
 
