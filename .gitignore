@@ -85,3 +85,5 @@ supabase/config.toml
 # Supabase CLI credentials
 .supabase/cli/config.toml
 .supabase/credentials
+
+AGENTS.md
