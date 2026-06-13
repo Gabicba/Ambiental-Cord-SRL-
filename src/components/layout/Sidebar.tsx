@@ -7,6 +7,7 @@ interface NavItem {
   label: string;
   icon: string;
   adminOnly?: boolean;
+  disabled?: boolean;
 }
 
 const mainNavItems: NavItem[] = [
@@ -15,13 +16,13 @@ const mainNavItems: NavItem[] = [
   { path: '/routes/templates', label: 'Plantillas', icon: 'ri-stack-line' },
   { path: '/customers', label: 'Clientes', icon: 'ri-building-line' },
   { path: '/trucks', label: 'Camiones', icon: 'ri-truck-line', adminOnly: true },
-  { path: '/trucks/maintenance', label: 'Mantenimiento', icon: 'ri-tools-line' },
+  { path: '/trucks/maintenance', label: 'Mantenimiento', icon: 'ri-tools-line', disabled: true },
   { path: '/drivers', label: 'Conductores', icon: 'ri-user-line', adminOnly: true },
   { path: '/companions', label: 'Acompañantes', icon: 'ri-user-add-line', adminOnly: true },
-  { path: '/equipment', label: 'Equipamiento', icon: 'ri-shirt-line' },
+  { path: '/equipment', label: 'Equipamiento', icon: 'ri-shirt-line', disabled: true },
   { path: '/gps', label: 'GPS Tracking', icon: 'ri-map-pin-line' },
-  { path: '/reports', label: 'Reportes', icon: 'ri-bar-chart-box-line' },
-  { path: '/documents', label: 'Documentos', icon: 'ri-file-list-3-line' },
+  { path: '/reports', label: 'Reportes', icon: 'ri-bar-chart-box-line', disabled: true },
+  { path: '/documents', label: 'Documentos', icon: 'ri-file-list-3-line', disabled: true },
 ];
 
 const bottomNavItems: NavItem[] = [
@@ -96,47 +97,46 @@ export default function Sidebar() {
 
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
           {visibleMainItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              onClick={closeMobile}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm font-medium ${
-                  isActive
-                    ? 'bg-brand-green text-white'
-                    : 'text-white/70 hover:bg-white/10 hover:text-white'
-                }`
-              }
-            >
-              <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">
-                <i className={`${item.icon} text-lg`} />
-              </span>
-              <span className={`whitespace-nowrap transition-all ${collapsed ? 'w-0 opacity-0 hidden' : 'opacity-100'}`}>
-                {item.label}
-              </span>
-            </NavLink>
+            item.disabled ? (
+              <div
+                key={item.path}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/30 cursor-not-allowed select-none"
+              >
+                <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+                  <i className={`${item.icon} text-lg`} />
+                </span>
+                <span className={`whitespace-nowrap transition-all flex items-center gap-2 ${collapsed ? 'w-0 opacity-0 hidden' : 'opacity-100'}`}>
+                  {item.label}
+                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-white/10 text-white/40">
+                    Próximo
+                  </span>
+                </span>
+              </div>
+            ) : (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                onClick={closeMobile}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm font-medium ${
+                    isActive
+                      ? 'bg-brand-green text-white'
+                      : 'text-white/70 hover:bg-white/10 hover:text-white'
+                  }`
+                }
+              >
+                <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+                  <i className={`${item.icon} text-lg`} />
+                </span>
+                <span className={`whitespace-nowrap transition-all ${collapsed ? 'w-0 opacity-0 hidden' : 'opacity-100'}`}>
+                  {item.label}
+                </span>
+              </NavLink>
+            )
           ))}
         </nav>
 
         <div className="border-t border-white/10 py-3 px-3 space-y-1">
-          <NavLink
-            to="/driver"
-            onClick={closeMobile}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm font-medium ${
-                isActive
-                  ? 'bg-brand-green text-white'
-                  : 'text-white/70 hover:bg-white/10 hover:text-white'
-              }`
-            }
-          >
-            <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">
-              <i className="ri-smartphone-line text-lg" />
-            </span>
-            <span className={`whitespace-nowrap transition-all ${collapsed ? 'w-0 opacity-0 hidden' : 'opacity-100'}`}>
-              App Conductor
-            </span>
-          </NavLink>
           {visibleBottomItems.map((item) => (
             <NavLink
               key={item.path}

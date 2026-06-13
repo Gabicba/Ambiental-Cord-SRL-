@@ -22,8 +22,8 @@ export default function RouteNewPage() {
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
   const [searchCustomer, setSearchCustomer] = useState('');
 
-  const availableTrucks = trucks.filter((t) => t.status === 'Active' || t.status === 'On_Route');
-  const availableDrivers = drivers.filter((d) => d.status === 'Active' || d.status === 'On_Route');
+  const availableTrucks = trucks.filter((t) => t.status === 'activo' || t.status === 'en_recorrido');
+  const availableDrivers = drivers.filter((d) => d.status === 'activo');
   const activeCustomers = customers.filter((c) => c.status === 'Active');
 
   const filteredCustomers = useMemo(() => activeCustomers.filter((c) => !selectedCustomers.includes(c.id) && (c.fantasy_name.toLowerCase().includes(searchCustomer.toLowerCase()) || (c.address || '').toLowerCase().includes(searchCustomer.toLowerCase()))), [searchCustomer, selectedCustomers, activeCustomers]);

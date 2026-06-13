@@ -13,13 +13,7 @@ import {
   Cell,
 } from 'recharts';
 import { useDashboardData } from '@/hooks/useDashboardData';
-
-const routeStatuses: Record<string, { label: string; color: string }> = {
-  Pending: { label: 'Pendiente', color: 'bg-amber-100 text-amber-700 border-amber-200' },
-  In_Progress: { label: 'En Progreso', color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  Completed: { label: 'Completada', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-  Canceled: { label: 'Cancelada', color: 'bg-red-100 text-red-700 border-red-200' },
-};
+import { routeStatuses } from '@/hooks/useRouteSheets';
 
 const maintenanceCategories: Record<string, { label: string; icon: string; color: string }> = {
   oil_change: { label: 'Aceite', icon: 'ri-oil-line', color: 'bg-amber-100 text-amber-700' },
@@ -316,9 +310,9 @@ export default function Dashboard() {
                       <td className="px-5 py-3">
                         <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${statusConfig?.color || 'bg-gray-100 text-gray-700'}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${
-                            route.status === 'Completed' ? 'bg-emerald-500' :
-                            route.status === 'In_Progress' ? 'bg-blue-500' :
-                            route.status === 'Pending' ? 'bg-amber-500' :
+                            route.status === 'finalizada' ? 'bg-emerald-500' :
+                            route.status === 'en_curso'   ? 'bg-blue-500' :
+                            route.status === 'pendiente'  ? 'bg-amber-500' :
                             'bg-red-500'
                           }`} />
                           {statusConfig?.label || route.status}

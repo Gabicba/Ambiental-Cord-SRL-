@@ -1,4 +1,5 @@
 import { StrictMode } from 'react'
+import 'leaflet/dist/leaflet.css';
 import './i18n'
 import { createRoot } from 'react-dom/client'
 import './index.css'
