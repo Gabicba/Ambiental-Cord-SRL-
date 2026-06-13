@@ -38,7 +38,7 @@ export default function PendientesPage() {
   }, [state.delayedClients]);
 
   const handleRevisit = (clientId: string) => {
-    dispatch({ type: "SET_CLIENT_STATUS", clientId, status: "In_Progress" });
+    dispatch({ type: "SET_CLIENT_STATUS", clientId, status: "pendiente" });
     dispatch({ type: "REMOVE_DELAYED", clientId });
     navigate(`/cliente/${clientId}`);
   };

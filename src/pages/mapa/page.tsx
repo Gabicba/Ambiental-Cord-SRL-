@@ -17,12 +17,11 @@ function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
 }
 
 const statusPin: Record<string, { color: string; label: string }> = {
-  Pending: { color: "#6b7280", label: "Pendiente" },
-  In_Progress: { color: "#3b82f6", label: "En proceso" },
-  Completed: { color: "#16a34a", label: "Completado" },
-  Delayed: { color: "#d97706", label: "Demorado" },
-  Closed: { color: "#dc2626", label: "Cerrado" },
-  Failed: { color: "#dc2626", label: "Fallido" },
+  pendiente: { color: "#6b7280", label: "Pendiente" },
+  completado: { color: "#16a34a", label: "Completado" },
+  demorado: { color: "#d97706", label: "Demorado" },
+  cerrado: { color: "#dc2626", label: "Cerrado" },
+  reprogramado: { color: "#dc2626", label: "Fallido" },
 };
 
 type FilterLayer = "todas" | "pendientes" | "completadas" | "en_ruta";
@@ -47,17 +46,17 @@ export default function MapaRecorridoPage() {
   const filteredVisits = useMemo(() => {
     switch (activeLayer) {
       case "pendientes":
-        return mergedVisits.filter((v) => v.status === "Pending" || v.status === "In_Progress" || v.status === "Delayed");
+        return mergedVisits.filter((v) => v.status === "pendiente" || v.status === "demorado");
       case "completadas":
-        return mergedVisits.filter((v) => v.status === "Completed" || v.status === "Closed" || v.status === "Failed");
+        return mergedVisits.filter((v) => v.status === "completado" || v.status === "cerrado" || v.status === "reprogramado");
       case "en_ruta":
-        return mergedVisits.filter((v) => v.status === "Pending" || v.status === "In_Progress");
+        return mergedVisits.filter((v) => v.status === "pendiente");
       default:
         return mergedVisits;
     }
   }, [activeLayer, mergedVisits]);
 
-  const activeForRoute = mergedVisits.filter((v) => v.status !== "Closed" && v.status !== "Failed");
+  const activeForRoute = mergedVisits.filter((v) => v.status !== "cerrado" && v.status !== "reprogramado");
 
   const routeSegments = useMemo(() => {
     const segments: { from: VisitData; to: VisitData; distanceKm: number; etaMin: number }[] = [];
@@ -101,9 +100,9 @@ export default function MapaRecorridoPage() {
   const totalEta = routeSegments.reduce((sum, s) => sum + s.etaMin, 0);
 
   const counts = {
-    pendientes: mergedVisits.filter((v) => v.status === "Pending").length,
-    completados: mergedVisits.filter((v) => v.status === "Completed" || v.status === "Closed" || v.status === "Failed").length,
-    enRuta: mergedVisits.filter((v) => v.status === "In_Progress" || v.status === "Delayed").length,
+    pendientes: mergedVisits.filter((v) => v.status === "pendiente").length,
+    completados: mergedVisits.filter((v) => v.status === "completado" || v.status === "cerrado" || v.status === "reprogramado").length,
+    enRuta: mergedVisits.filter((v) => v.status === "pendiente" || v.status === "demorado").length,
   };
 
   const handleTogglePanel = () => {
@@ -113,7 +112,7 @@ export default function MapaRecorridoPage() {
   };
 
   const nextStop = mergedVisits.find(
-    (v) => v.status === "Pending" || v.status === "In_Progress"
+    (v) => v.status === "pendiente"
   ) || null;
 
   const layerTabs: { value: FilterLayer; label: string; count: number }[] = [
@@ -294,8 +293,8 @@ export default function MapaRecorridoPage() {
                   ) : (
                     <div className="py-2">
                       {filteredVisits.map((visit) => {
-                        const pin = statusPin[visit.status] || statusPin.Pending;
-                        const isActive = visit.status === "In_Progress";
+                        const pin = statusPin[visit.status] || statusPin.pendiente;
+                        const isActive = visit.visited_at !== null && visit.status === "pendiente";
                         const isSelected = selectedVisitId === visit.id;
                         return (
                           <button

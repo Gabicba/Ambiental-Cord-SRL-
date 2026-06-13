@@ -44,13 +44,13 @@ export default function FinalizarPage() {
     return c;
   }, [mergedVisits]);
 
-  const totalCompletados = (counts.Completed || 0) + (counts.Closed || 0) + (counts.Failed || 0);
-  const totalPendientes = (counts.Pending || 0) + (counts.Delayed || 0) + (counts.In_Progress || 0);
+  const totalCompletados = (counts.completado || 0) + (counts.cerrado || 0) + (counts.reprogramado || 0);
+  const totalPendientes = (counts.pendiente || 0) + (counts.demorado || 0);
   const totalFotos = mergedVisits.reduce((sum, v) => sum + (v.photos?.length || 0), 0);
 
   const distanciaTotal = useMemo(() => {
     const withCoords = mergedVisits
-      .filter((v) => v.status !== "Closed" && v.status !== "Failed" && v.pickup_lat != null && v.pickup_lng != null)
+      .filter((v) => v.status !== "cerrado" && v.status !== "reprogramado" && v.pickup_lat != null && v.pickup_lng != null)
       .sort((a, b) => a.visit_order - b.visit_order);
 
     if (withCoords.length < 2) return 0;
@@ -75,7 +75,7 @@ export default function FinalizarPage() {
   const now = new Date();
   const observacionesCount = mergedVisits.filter((v) => v.observations && v.observations.trim().length > 0).length;
   const clientesConIncidencia = mergedVisits.filter(
-    (v) => v.status === "Delayed" || v.status === "Failed" || v.status === "Closed"
+    (v) => v.status === "demorado" || v.status === "reprogramado" || v.status === "cerrado"
   ).length;
 
   const handleFinalizar = async () => {

@@ -218,7 +218,7 @@ export function DriverDataProvider({ children }: { children: ReactNode }) {
     }
 
     const pendingVisits = visits.filter(
-      (v) => v.status === "Pending" || v.status === "In_Progress"
+      (v) => v.status === "pendiente"
     );
 
     if (pendingVisits.length > 0) {
@@ -231,7 +231,7 @@ export function DriverDataProvider({ children }: { children: ReactNode }) {
     try {
       const { error: updErr } = await supabase
         .from("route_sheets")
-        .update({ status: "Completed", updated_at: new Date().toISOString() })
+        .update({ status: "completado", updated_at: new Date().toISOString() })
         .eq("id", routeSheet.id);
 
       if (updErr) {
@@ -239,7 +239,7 @@ export function DriverDataProvider({ children }: { children: ReactNode }) {
       }
 
       setRouteSheet((prev) =>
-        prev ? { ...prev, status: "Completed" } : null
+        prev ? { ...prev, status: "completado" } : null
       );
 
       return { success: true };

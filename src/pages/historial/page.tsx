@@ -6,42 +6,35 @@ import { useRouteState } from "@/hooks/useRouteState";
 import { useAuth } from "@/hooks/useAuth";
 
 const visitLabelMap: Record<string, { label: string; icon: string; bg: string; text: string; dot: string }> = {
-  Completed: {
+  completado: {
     label: "Completada",
     icon: "ri-checkbox-circle-line",
     bg: "bg-accent-100",
     text: "text-accent-700",
     dot: "bg-accent-500",
   },
-  Closed: {
+  cerrado: {
     label: "Cerrado",
     icon: "ri-door-lock-line",
     bg: "bg-red-100",
     text: "text-red-700",
     dot: "bg-red-500",
   },
-  Delayed: {
+  demorado: {
     label: "Demorado",
     icon: "ri-timer-line",
     bg: "bg-amber-100",
     text: "text-amber-700",
     dot: "bg-amber-500",
   },
-  Failed: {
+  reprogramado: {
     label: "Fallido",
     icon: "ri-close-circle-line",
     bg: "bg-secondary-200",
     text: "text-secondary-700",
     dot: "bg-secondary-500",
   },
-  In_Progress: {
-    label: "En proceso",
-    icon: "ri-truck-line",
-    bg: "bg-primary-100",
-    text: "text-primary-700",
-    dot: "bg-primary-500",
-  },
-  Pending: {
+  pendiente: {
     label: "Pendiente",
     icon: "ri-time-line",
     bg: "bg-secondary-100",
@@ -88,7 +81,7 @@ export default function HistorialPage() {
   };
 
   const visitStatus = (visit: VisitData) => {
-    return visitLabelMap[visit.status] || visitLabelMap.Pending;
+    return visitLabelMap[visit.status] || visitLabelMap.pendiente;
   };
 
   const totalPhotos = processedVisits.reduce((sum, v) => sum + (v.photos?.length || 0), 0);

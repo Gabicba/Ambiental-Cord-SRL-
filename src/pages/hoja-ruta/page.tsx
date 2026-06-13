@@ -5,42 +5,35 @@ import { useDriverData, type VisitData } from "@/hooks/useDriverData";
 import { useRouteState } from "@/hooks/useRouteState";
 
 const statusConfig: Record<string, { label: string; icon: string; bg: string; text: string; dot: string }> = {
-  Pending: {
+  pendiente: {
     label: "Pendiente",
     icon: "ri-time-line",
     bg: "bg-secondary-100",
     text: "text-foreground-600",
     dot: "bg-secondary-400",
   },
-  In_Progress: {
-    label: "En proceso",
-    icon: "ri-truck-line",
-    bg: "bg-primary-100",
-    text: "text-primary-600",
-    dot: "bg-primary-500",
-  },
-  Completed: {
+  completado: {
     label: "Completado",
     icon: "ri-check-double-line",
     bg: "bg-accent-100",
     text: "text-accent-600",
     dot: "bg-accent-500",
   },
-  Delayed: {
+  demorado: {
     label: "Demorado",
     icon: "ri-alarm-warning-line",
     bg: "bg-amber-100",
     text: "text-amber-600",
     dot: "bg-amber-500",
   },
-  Closed: {
+  cerrado: {
     label: "Cerrado",
     icon: "ri-close-circle-line",
     bg: "bg-red-100",
     text: "text-red-600",
     dot: "bg-red-500",
   },
-  Failed: {
+  reprogramado: {
     label: "Fallido",
     icon: "ri-error-warning-line",
     bg: "bg-red-100",
@@ -49,14 +42,15 @@ const statusConfig: Record<string, { label: string; icon: string; bg: string; te
   },
 };
 
-type FilterStatus = "todas" | "Pending" | "In_Progress" | "Completed" | "Delayed" | "Closed" | "Failed";
+type FilterStatus = "todas" | "pendiente" | "completado" | "demorado" | "cerrado" | "reprogramado";
 
 const filterTabs: { value: FilterStatus; label: string }[] = [
   { value: "todas", label: "Todas" },
-  { value: "Pending", label: "Pendientes" },
-  { value: "In_Progress", label: "En proceso" },
-  { value: "Completed", label: "Completadas" },
-  { value: "Delayed", label: "Demoradas" },
+  { value: "pendiente", label: "Pendientes" },
+  { value: "completado", label: "Completadas" },
+  { value: "demorado", label: "Demoradas" },
+  { value: "cerrado", label: "Cerrados" },
+  { value: "reprogramado", label: "Fallidos" },
 ];
 
 export default function HojaRutaPage() {
@@ -85,9 +79,9 @@ export default function HojaRutaPage() {
     return c;
   }, [mergedVisits]);
 
-  const completedCount = (counts.Completed || 0) + (counts.Closed || 0) + (counts.Failed || 0);
+  const completedCount = (counts.completado || 0) + (counts.cerrado || 0) + (counts.reprogramado || 0);
   const remainingCount = mergedVisits.length - completedCount;
-  const delayedCount = counts.Delayed || 0;
+  const delayedCount = counts.demorado || 0;
   const totalDelayedInList = state.delayedClients.length;
 
   if (loading) {
@@ -159,7 +153,7 @@ export default function HojaRutaPage() {
           ) : (
             <div className="space-y-3">
               {filteredVisits.map((visit) => {
-                const status = statusConfig[visit.status] || statusConfig.Pending;
+                const status = statusConfig[visit.status] || statusConfig.pendiente;
                 const displayName = visit.customer_fantasy_name || "Cliente sin nombre";
                 const displayAddress = visit.pickup_address || visit.customer_address || "Sin dirección";
                 const displayPhone = visit.customer_phone || null;

@@ -21,12 +21,11 @@ export default function ResumenPage() {
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {
-      Pending: 0,
-      In_Progress: 0,
-      Completed: 0,
-      Delayed: 0,
-      Closed: 0,
-      Failed: 0,
+      pendiente: 0,
+      completado: 0,
+      demorado: 0,
+      cerrado: 0,
+      reprogramado: 0,
     };
     visits.forEach((v) => {
       c[v.status] = (c[v.status] || 0) + 1;
@@ -35,10 +34,10 @@ export default function ResumenPage() {
   }, [visits]);
 
   const totalVisits = visits.length;
-  const pendingCount = counts.Pending || 0;
-  const completedCount = (counts.Completed || 0) + (counts.Closed || 0);
-  const delayedCount = counts.Delayed || 0;
-  const failedCount = counts.Failed || 0;
+  const pendingCount = counts.pendiente || 0;
+  const completedCount = (counts.completado || 0) + (counts.cerrado || 0);
+  const delayedCount = counts.demorado || 0;
+  const failedCount = counts.reprogramado || 0;
   const profilePhoto = (user?.user_metadata?.avatar_url as string) || null;
 
   const stats = [

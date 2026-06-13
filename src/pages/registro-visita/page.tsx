@@ -8,25 +8,25 @@ import { supabase } from "@/lib/supabase";
 
 const visitStatuses = [
   {
-    value: "Completed",
+    value: "completado",
     label: "Completada",
     icon: "ri-checkbox-circle-line",
     color: "bg-accent-100 text-accent-700 border-accent-300",
   },
   {
-    value: "Closed",
+    value: "cerrado",
     label: "Cliente cerrado",
     icon: "ri-door-lock-line",
     color: "bg-red-100 text-red-700 border-red-300",
   },
   {
-    value: "Delayed",
+    value: "demorado",
     label: "Cliente demorado",
     icon: "ri-timer-line",
     color: "bg-amber-100 text-amber-700 border-amber-300",
   },
   {
-    value: "Failed",
+    value: "reprogramado",
     label: "No se pudo realizar",
     icon: "ri-close-circle-line",
     color: "bg-secondary-200 text-secondary-700 border-secondary-300",
@@ -53,9 +53,11 @@ export default function RegistroVisitaPage() {
   const [photoError, setPhotoError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [visitStarted, setVisitStarted] = useState(false);
+  const [startError, setStartError] = useState("");
+  const [starting, setStarting] = useState(false);
 
   useEffect(() => {
-    if (visit && visit.status === "In_Progress") {
+    if (visit && visit.visited_at !== null) {
       setVisitStarted(true);
     }
   }, [visit]);
@@ -83,13 +85,17 @@ export default function RegistroVisitaPage() {
   }
 
   const handleStartVisit = async () => {
+    setStartError("");
+    setStarting(true);
     const result = await updateVisit(visit.id, {
-      status: "In_Progress",
       visited_at: new Date().toISOString(),
     });
+    setStarting(false);
     if (result.success) {
-      dispatch({ type: "SET_CLIENT_STATUS", clientId: visit.id, status: "In_Progress" });
+      dispatch({ type: "SET_CLIENT_STATUS", clientId: visit.id, status: "pendiente" });
       setVisitStarted(true);
+    } else {
+      setStartError(result.error || "No se pudo iniciar la visita. Verificá tu conexión o contactá al administrador.");
     }
   };
 
@@ -167,9 +173,9 @@ export default function RegistroVisitaPage() {
 
     const now = new Date().toISOString();
 
-    if (selectedStatus === "Delayed") {
+    if (selectedStatus === "demorado") {
       await updateVisit(visit.id, {
-        status: "Delayed",
+        status: "demorado",
         observations: notes || null,
         receiver_name: receiverName || null,
         receiver_dni: receiverDoc || null,
@@ -177,7 +183,7 @@ export default function RegistroVisitaPage() {
         updated_at: now,
       });
 
-      dispatch({ type: "SET_CLIENT_STATUS", clientId: visit.id, status: "Delayed" });
+      dispatch({ type: "SET_CLIENT_STATUS", clientId: visit.id, status: "demorado" });
 
       dispatch({
         type: "ADD_VISIT",
@@ -311,12 +317,34 @@ export default function RegistroVisitaPage() {
 
           <div className="fixed bottom-0 left-0 right-0 flex justify-center pointer-events-none">
             <div className="w-full max-w-[430px] px-5 pb-8 pt-4 bg-gradient-to-t from-background-50 via-background-50 to-transparent pointer-events-auto">
+              {startError && (
+                <div className="mb-3 p-3 bg-red-100 rounded-xl border border-red-200 flex items-start gap-2">
+                  <div className="w-5 h-5 flex items-center justify-center shrink-0 mt-0.5">
+                    <i className="ri-error-warning-line text-red-500 text-sm"></i>
+                  </div>
+                  <p className="text-xs text-red-700 leading-relaxed">{startError}</p>
+                </div>
+              )}
               <button
                 onClick={handleStartVisit}
-                className="w-full py-4 bg-primary-500 text-background-50 font-semibold text-base rounded-2xl hover:bg-primary-600 active:scale-[0.98] transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-2"
+                disabled={starting}
+                className={`w-full py-4 font-semibold text-base rounded-2xl transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-2 ${
+                  starting
+                    ? "bg-primary-400 text-background-50 cursor-wait"
+                    : "bg-primary-500 text-background-50 hover:bg-primary-600 active:scale-[0.98]"
+                }`}
               >
-                <i className="ri-play-circle-line text-xl"></i>
-                INICIAR VISITA
+                {starting ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-background-50/30 border-t-background-50 rounded-full animate-spin"></div>
+                    Iniciando...
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-play-circle-line text-xl"></i>
+                    INICIAR VISITA
+                  </>
+                )}
               </button>
             </div>
           </div>

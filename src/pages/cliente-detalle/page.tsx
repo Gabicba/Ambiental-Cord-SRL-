@@ -78,28 +78,26 @@ export default function ClienteDetallePage() {
   };
 
   const handleIniciarVisita = () => {
-    dispatch({ type: "SET_CLIENT_STATUS", clientId: visit.id, status: "In_Progress" });
+    dispatch({ type: "SET_CLIENT_STATUS", clientId: visit.id, status: "pendiente" });
     navigate(`/cliente/${visit.id}/visita`);
   };
 
-  const isActionDisabled = currentStatus === "Completed" || currentStatus === "Closed" || currentStatus === "Failed";
+  const isActionDisabled = currentStatus === "completado" || currentStatus === "cerrado" || currentStatus === "reprogramado";
 
   const statusLabelMap: Record<string, string> = {
-    Pending: "Pendiente",
-    In_Progress: "En proceso",
-    Completed: "Completado",
-    Delayed: "Demorado",
-    Closed: "Cerrado",
-    Failed: "Fallido",
+    pendiente: "Pendiente",
+    completado: "Completado",
+    demorado: "Demorado",
+    cerrado: "Cerrado",
+    reprogramado: "Fallido",
   };
 
   const statusColorMap: Record<string, string> = {
-    Pending: "text-foreground-600",
-    In_Progress: "text-primary-600",
-    Completed: "text-accent-600",
-    Delayed: "text-amber-600",
-    Closed: "text-red-600",
-    Failed: "text-red-600",
+    pendiente: "text-foreground-600",
+    completado: "text-accent-600",
+    demorado: "text-amber-600",
+    cerrado: "text-red-600",
+    reprogramado: "text-red-600",
   };
 
   return (

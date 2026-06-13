@@ -41,7 +41,7 @@ export default function ClienteDemoradoPage() {
     setSaving(true);
 
     const result = await updateVisit(visit.id, {
-      status: "Delayed",
+      status: "demorado",
       delay_reason: "Cliente solicita volver más tarde",
       delay_return_time: null,
       updated_at: new Date().toISOString(),
@@ -51,7 +51,7 @@ export default function ClienteDemoradoPage() {
 
     if (!result.success) return;
 
-    dispatch({ type: "SET_CLIENT_STATUS", clientId: visit.id, status: "Delayed" });
+    dispatch({ type: "SET_CLIENT_STATUS", clientId: visit.id, status: "demorado" });
 
     dispatch({
       type: "ADD_DELAYED",
