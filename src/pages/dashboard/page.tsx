@@ -137,7 +137,7 @@ export default function Dashboard() {
       </div>
 
       {/* Maintenance Alerts Banner */}
-      {(maintSummary.expired > 0 || maintSummary.due > 0) && (
+      {false && (maintSummary.expired > 0 || maintSummary.due > 0) && (
         <div className="bg-red-50 rounded-xl p-4 border border-red-200">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
