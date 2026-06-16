@@ -13,6 +13,7 @@ interface DriverData {
   joined_at: string | null; birth_date: string | null; address: string | null;
   emergency_contact: Record<string, unknown> | null; notes: string | null;
   created_at: string; updated_at: string; deleted_at: string | null;
+  auth_user_id: string | null;
 }
 
 interface EquipmentItem {
@@ -70,6 +71,13 @@ export default function DriverDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [showAccessModal, setShowAccessModal] = useState(false);
+  const [accessEmail, setAccessEmail] = useState('');
+  const [accessPassword, setAccessPassword] = useState('');
+  const [accessSaving, setAccessSaving] = useState(false);
+  const [accessError, setAccessError] = useState('');
+  const [accessSuccess, setAccessSuccess] = useState(false);
   const [editForm, setEditForm] = useState({ name: '', phone: '', dni: '', email: '', address: '', status: '', assigned_truck_id: '', notes: '' });
   const [saving, setSaving] = useState(false);
 
@@ -129,9 +137,36 @@ export default function DriverDetailPage() {
   };
 
   const handleDeactivate = async () => {
-    if (!window.confirm('Dar de baja este conductor?')) return;
-    try { await deleteDriver(driver.id); navigate('/drivers'); }
-    catch (e) { alert(e instanceof Error ? e.message : 'Error'); }
+    try {
+      await deleteDriver(driver.id);
+      navigate('/drivers');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error');
+    }
+  };
+
+  const handleCreateAccess = async () => {
+    if (!accessEmail || !accessPassword) return;
+    setAccessSaving(true);
+    setAccessError('');
+    try {
+      await api.post(`/drivers/${driver.id}/create-access`, {
+        email: accessEmail,
+        password: accessPassword,
+      });
+      setAccessSuccess(true);
+      setTimeout(() => {
+        setShowAccessModal(false);
+        setAccessSuccess(false);
+        setAccessEmail('');
+        setAccessPassword('');
+        fetchData();
+      }, 1500);
+    } catch (e) {
+      setAccessError(e instanceof Error ? e.message : 'Error al crear acceso');
+    } finally {
+      setAccessSaving(false);
+    }
   };
 
   const inputCls = 'w-full px-4 py-2.5 rounded-lg bg-brand-light border border-brand-border text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-green/30';
@@ -153,7 +188,17 @@ export default function DriverDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={handleDeactivate} className="px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors whitespace-nowrap"><i className="ri-close-circle-line mr-1.5" />Dar de Baja</button>
+          <button
+            type="button"
+            onClick={() => setShowAccessModal(true)}
+            className="px-4 py-2 border border-brand-green text-brand-green rounded-lg text-sm font-medium hover:bg-brand-green/10 transition-colors whitespace-nowrap"
+          >
+            <i className="ri-key-line mr-1.5" />
+            {driver.auth_user_id ? 'Acceso creado' : 'Crear acceso'}
+          </button>
+          <button type="button" onClick={() => setShowDeactivateModal(true)} className="px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors whitespace-nowrap">
+            <i className="ri-close-circle-line mr-1.5" />Dar de Baja
+          </button>
           <button type="button" onClick={openEdit} className="inline-flex items-center gap-2 px-3 py-2 border border-brand-border rounded-lg text-sm font-medium text-text-secondary hover:border-brand-green hover:text-brand-green transition-colors whitespace-nowrap"><i className="ri-edit-line" />Editar</button>
         </div>
       </div>
@@ -252,6 +297,113 @@ export default function DriverDetailPage() {
               <div><label className={labelCls}>Observaciones</label><textarea value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} rows={3} maxLength={500} className={inputCls + ' resize-none'} /></div>
             </div>
             <div className="p-5 border-t border-brand-border/60 flex items-center justify-end gap-3"><button type="button" onClick={() => setShowEditModal(false)} className="px-4 py-2 rounded-lg border border-brand-border text-sm font-medium text-text-secondary hover:bg-brand-light transition-colors whitespace-nowrap">Cancelar</button><button type="button" onClick={saveEdit} disabled={saving || !editForm.name} className={'px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors whitespace-nowrap ' + (saving || !editForm.name ? 'bg-gray-300 cursor-not-allowed' : 'bg-brand-green hover:bg-brand-green/90')}>{saving ? 'Guardando...' : 'Guardar Cambios'}</button></div>
+          </div>
+        </div>
+      )}
+
+      {showDeactivateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-sm">
+            <div className="p-5 border-b border-brand-border/60">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                  <i className="ri-close-circle-line text-red-600 text-lg" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-text-primary">Dar de Baja</h3>
+                  <p className="text-xs text-text-muted mt-0.5">Esta accion no se puede deshacer facilmente</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-5">
+              <p className="text-sm text-text-secondary">
+                ¿Confirmas que queres dar de baja al conductor <span className="font-semibold text-text-primary">{driver.name}</span>? Dejara de aparecer en los listados y no podra ser asignado a nuevas rutas.
+              </p>
+            </div>
+            <div className="p-5 border-t border-brand-border/60 flex items-center justify-end gap-3">
+              <button type="button" onClick={() => setShowDeactivateModal(false)} className="px-4 py-2 rounded-lg border border-brand-border text-sm font-medium text-text-secondary hover:bg-brand-light transition-colors whitespace-nowrap">
+                Cancelar
+              </button>
+              <button type="button" onClick={handleDeactivate} className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors whitespace-nowrap">
+                Confirmar Baja
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-sm">
+            <div className="p-5 border-b border-brand-border/60 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-brand-green/10 flex items-center justify-center flex-shrink-0">
+                  <i className="ri-key-line text-brand-green text-lg" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-text-primary">Crear acceso</h3>
+                  <p className="text-xs text-text-muted mt-0.5">{driver.name}</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setShowAccessModal(false)} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-brand-light transition-colors">
+                <i className="ri-close-line text-lg" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {accessSuccess ? (
+                <div className="flex flex-col items-center py-4">
+                  <div className="w-12 h-12 rounded-full bg-brand-green/10 flex items-center justify-center mb-3">
+                    <i className="ri-check-line text-brand-green text-2xl" />
+                  </div>
+                  <p className="text-sm font-medium text-text-primary">Acceso creado correctamente</p>
+                </div>
+              ) : (
+                <>
+                  {accessError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                      <p className="text-xs text-red-600">{accessError}</p>
+                    </div>
+                  )}
+                  <div>
+                    <label className={labelCls}>Email</label>
+                    <input
+                      type="email"
+                      value={accessEmail}
+                      onChange={(e) => setAccessEmail(e.target.value)}
+                      placeholder="conductor@empresa.com"
+                      className={inputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Contraseña</label>
+                    <input
+                      type="password"
+                      value={accessPassword}
+                      onChange={(e) => setAccessPassword(e.target.value)}
+                      placeholder="Mínimo 8 caracteres"
+                      className={inputCls}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {!accessSuccess && (
+              <div className="p-5 border-t border-brand-border/60 flex items-center justify-end gap-3">
+                <button type="button" onClick={() => setShowAccessModal(false)} className="px-4 py-2 rounded-lg border border-brand-border text-sm font-medium text-text-secondary hover:bg-brand-light transition-colors whitespace-nowrap">
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateAccess}
+                  disabled={accessSaving || !accessEmail || accessPassword.length < 8}
+                  className={'px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors whitespace-nowrap ' + (accessSaving || !accessEmail || accessPassword.length < 8 ? 'bg-gray-300 cursor-not-allowed' : 'bg-brand-green hover:bg-brand-green/90')}
+                >
+                  {accessSaving ? 'Creando...' : 'Crear acceso'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
