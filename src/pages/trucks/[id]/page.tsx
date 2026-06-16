@@ -49,6 +49,7 @@ export default function TruckDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [editForm, setEditForm] = useState({ plate: '', model: '', year: '', capacity_liters: 0, gps_device_id: '', assigned_driver_id: '', notes: '' });
   const [saving, setSaving] = useState(false);
 
@@ -99,9 +100,12 @@ export default function TruckDetailPage() {
   };
 
   const handleDeactivate = async () => {
-    if (!window.confirm('Dar de baja este camion?')) return;
-    try { await deleteTruck(truck.id); navigate('/trucks'); }
-    catch (e) { alert(e instanceof Error ? e.message : 'Error'); }
+    try {
+      await deleteTruck(truck.id);
+      navigate('/trucks');
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error');
+    }
   };
 
   const inputCls = 'w-full px-4 py-2.5 rounded-lg bg-brand-light border border-brand-border text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-green/30';
@@ -121,7 +125,9 @@ export default function TruckDetailPage() {
           <p className="text-sm text-text-secondary mt-1">{truck.model}</p>
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={handleDeactivate} className="px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors whitespace-nowrap"><i className="ri-close-circle-line mr-1.5" />Dar de Baja</button>
+          <button type="button" onClick={() => setShowDeactivateModal(true)} className="px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors whitespace-nowrap">
+            <i className="ri-close-circle-line mr-1.5" />Dar de Baja
+          </button>
           <button type="button" onClick={openEdit} className="inline-flex items-center gap-2 px-3 py-2 border border-brand-border rounded-lg text-sm font-medium text-text-secondary hover:border-brand-green hover:text-brand-green transition-colors whitespace-nowrap"><i className="ri-edit-line" />Editar</button>
         </div>
       </div>
@@ -202,6 +208,37 @@ export default function TruckDetailPage() {
               <div><label className={labelCls}>Observaciones</label><textarea value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} rows={3} maxLength={500} className={inputCls + ' resize-none'} /></div>
             </div>
             <div className="p-5 border-t border-brand-border/60 flex items-center justify-end gap-3"><button type="button" onClick={() => setShowEditModal(false)} className="px-4 py-2 rounded-lg border border-brand-border text-sm font-medium text-text-secondary hover:bg-brand-light transition-colors whitespace-nowrap">Cancelar</button><button type="button" onClick={saveEdit} disabled={saving || !editForm.plate} className={'px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors whitespace-nowrap ' + (saving || !editForm.plate ? 'bg-gray-300 cursor-not-allowed' : 'bg-brand-green hover:bg-brand-green/90')}>{saving ? 'Guardando...' : 'Guardar Cambios'}</button></div>
+          </div>
+        </div>
+      )}
+
+      {showDeactivateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-sm">
+            <div className="p-5 border-b border-brand-border/60">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                  <i className="ri-close-circle-line text-red-600 text-lg" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-text-primary">Dar de Baja</h3>
+                  <p className="text-xs text-text-muted mt-0.5">Esta accion no se puede deshacer facilmente</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-5">
+              <p className="text-sm text-text-secondary">
+                ¿Confirmas que queres dar de baja el camion <span className="font-semibold text-text-primary">{truck.plate}</span>? Dejara de aparecer en los listados y no podra ser asignado a nuevas rutas.
+              </p>
+            </div>
+            <div className="p-5 border-t border-brand-border/60 flex items-center justify-end gap-3">
+              <button type="button" onClick={() => setShowDeactivateModal(false)} className="px-4 py-2 rounded-lg border border-brand-border text-sm font-medium text-text-secondary hover:bg-brand-light transition-colors whitespace-nowrap">
+                Cancelar
+              </button>
+              <button type="button" onClick={handleDeactivate} className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors whitespace-nowrap">
+                Confirmar Baja
+              </button>
+            </div>
           </div>
         </div>
       )}
