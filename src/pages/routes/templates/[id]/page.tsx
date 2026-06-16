@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api';
 import { useCustomers } from '@/hooks/useCustomers';
 import { useTrucks } from '@/hooks/useTrucks';
 import { useDrivers } from '@/hooks/useDrivers';
@@ -37,8 +38,8 @@ export default function RouteTemplateDetailPage() {
   useEffect(() => { fetchTemplate(); }, [fetchTemplate]);
 
   const activeCustomers = customers.filter((c) => c.status === 'Active');
-  const availableTrucks = trucks.filter((t) => t.status === 'Active' || t.status === 'On_Route');
-  const availableDrivers = drivers.filter((d) => d.status === 'Active' || d.status === 'On_Route');
+  const availableTrucks = trucks.filter((t) => t.status === 'activo' || t.status === 'en_recorrido');
+  const availableDrivers = drivers.filter((d) => d.status === 'activo');
 
   const templateCustomers = useMemo(() => {
     if (!template) return [];
@@ -57,18 +58,30 @@ export default function RouteTemplateDetailPage() {
 
   const handleCreateRoute = async () => {
     if (!isValid || !template) return;
-    setSaving(true); setSaveError(null);
+    setSaving(true);
+    setSaveError(null);
     try {
-      const { data: route, error: routeErr } = await supabase.from('route_sheets').insert({ name: template.name, date, truck_id: truckId, driver_id: driverId, status: 'Pending', route_template_id: template.id }).select().single();
-      if (routeErr) throw routeErr;
-      const visitRows = template.customer_ids.map((cid, idx) => ({ route_id: route.id, customer_id: cid, visit_order: idx + 1, status: 'Pending' }));
-      if (visitRows.length > 0) {
-        const { error: vErr } = await supabase.from('route_visits').insert(visitRows);
-        if (vErr) throw vErr;
-      }
+      const route = await api.post<{ id: string }>('/route-sheets', {
+        name: template.name,
+        date,
+        truckId,
+        driverId,
+      });
+
+      const visits = template.customer_ids.map((customerId, idx) => ({
+        routeId: route.id,
+        customerId,
+        visitOrder: idx + 1,
+      }));
+
+      await Promise.all(visits.map((v) => api.post('/route-visits', v)));
+
       navigate('/routes');
-    } catch (e) { setSaveError(e instanceof Error ? e.message : 'Error'); }
-    finally { setSaving(false); }
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Error al crear la ruta');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
