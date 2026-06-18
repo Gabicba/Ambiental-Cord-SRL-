@@ -5,16 +5,18 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 
 interface RouteData { id: string; name: string; date: string; truck_id: string | null; driver_id: string | null; companion_id: string | null; status: string; }
-interface VisitData { id: string; route_id: string; customer_id: string; visit_order: number; status: string; liters_collected: number; payment_amount: number; }
+interface VisitData { id: string; route_id: string; customer_id: string; visit_order: number; status: string; liters_collected: number; payment_amount: number; photos: { url: string; public_id: string }[] | null; }
 interface TruckSimple { id: string; plate: string; model: string | null; }
 interface DriverSimple { id: string; name: string; dni: string | null; license_type: string | null; }
 interface CompanionSimple { id: string; full_name: string; dni: string | null; }
 interface CustomerSimple { id: string; fantasy_name: string; address: string | null; }
 
 const visitStatusConfig: Record<string, { label: string; color: string; dot: string }> = {
-  Pending: { label: 'Pendiente', color: 'bg-amber-100 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
-  Visited: { label: 'Visitado', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
-  Skipped: { label: 'Omitido', color: 'bg-gray-100 text-gray-700 border-gray-200', dot: 'bg-gray-500' },
+  pendiente:    { label: 'Pendiente',    color: 'bg-amber-100 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
+  completado:   { label: 'Completado',   color: 'bg-emerald-100 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+  cerrado:      { label: 'Cerrado',      color: 'bg-slate-100 text-slate-700 border-slate-200', dot: 'bg-slate-500' },
+  demorado:     { label: 'Demorado',     color: 'bg-orange-100 text-orange-700 border-orange-200', dot: 'bg-orange-500' },
+  reprogramado: { label: 'Reprogramado', color: 'bg-purple-100 text-purple-700 border-purple-200', dot: 'bg-purple-500' },
 };
 
 const routeStatuses: Record<string, { label: string; color: string }> = {
@@ -35,6 +37,7 @@ export default function RouteDetailPage() {
   const [companion, setCompanion] = useState<CompanionSimple | null>(null);
   const [customers, setCustomers] = useState<Record<string, CustomerSimple>>({});
   const [error, setError] = useState<string | null>(null);
+  const [photoModal, setPhotoModal] = useState<{ visitId: string; photos: { url: string; public_id: string }[] } | null>(null);
   const { isAdmin } = useAuth();
 
   const fetchData = useCallback(async () => {
@@ -71,7 +74,8 @@ export default function RouteDetailPage() {
   if (error || !route) return (<div className="min-h-[60vh] flex flex-col items-center justify-center"><i className="ri-route-line text-3xl text-text-muted mb-4" /><h2 className="text-lg font-semibold">Ruta no encontrada</h2><button onClick={() => navigate('/routes')} className="mt-4 px-4 py-2 bg-brand-primary text-white rounded-lg text-sm">Volver</button></div>);
 
   const statusCfg = routeStatuses[route.status] || routeStatuses.pendiente;
-  const completedCount = visits.filter((v) => v.status === 'Visited').length;
+  const VISITED_STATUSES = ['completado'];
+  const completedCount = visits.filter((v) => VISITED_STATUSES.includes(v.status)).length;
   const progress = visits.length > 0 ? Math.round((completedCount / visits.length) * 100) : 0;
   const totalLiters = visits.reduce((s, v) => s + (v.liters_collected || 0), 0);
   const totalPayments = visits.reduce((s, v) => s + (v.payment_amount || 0), 0);
@@ -135,8 +139,26 @@ export default function RouteDetailPage() {
 
       <div className="bg-white rounded-xl border border-brand-border/60 overflow-hidden">
         <div className="p-5 border-b border-brand-border/60"><h3 className="text-sm font-semibold">Visitas</h3></div>
-        <div className="overflow-x-auto"><table className="w-full"><thead><tr className="border-b border-brand-border/40"><th className="text-left text-xs font-medium text-text-muted uppercase px-5 py-3 w-12">#</th><th className="text-left text-xs font-medium text-text-muted uppercase px-5 py-3">Cliente</th><th className="text-left text-xs font-medium text-text-muted uppercase px-5 py-3">Direccion</th><th className="text-left text-xs font-medium text-text-muted uppercase px-5 py-3">Estado</th><th className="text-right text-xs font-medium text-text-muted uppercase px-5 py-3">Litros</th><th className="text-right text-xs font-medium text-text-muted uppercase px-5 py-3">Pago</th></tr></thead><tbody>{visits.map((v) => { const cfg = visitStatusConfig[v.status] || visitStatusConfig.Pending; const cust = customers[v.customer_id]; return (<tr key={v.id} className="border-b border-brand-border/30 hover:bg-brand-light/50 transition-colors"><td className="px-5 py-3"><span className="w-7 h-7 rounded-full bg-brand-primary/10 flex items-center justify-center text-xs font-bold text-brand-primary">{v.visit_order}</span></td><td className="px-5 py-3"><p className="text-sm font-medium">{cust?.fantasy_name || v.customer_id}</p></td><td className="px-5 py-3 text-sm text-text-secondary max-w-[200px] truncate">{cust?.address || '—'}</td><td className="px-5 py-3"><span className={'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ' + cfg.color}><span className={'w-1.5 h-1.5 rounded-full ' + cfg.dot} />{cfg.label}</span></td><td className="px-5 py-3 text-sm font-medium text-right">{v.liters_collected > 0 ? v.liters_collected + ' L' : '—'}</td><td className="px-5 py-3 text-sm text-right">{v.payment_amount > 0 ? '$' + v.payment_amount.toLocaleString() : '—'}</td></tr>); })}</tbody></table></div>
+        <div className="overflow-x-auto"><table className="w-full"><thead><tr className="border-b border-brand-border/40"><th className="text-left text-xs font-medium text-text-muted uppercase px-5 py-3 w-12">#</th><th className="text-left text-xs font-medium text-text-muted uppercase px-5 py-3">Cliente</th><th className="text-left text-xs font-medium text-text-muted uppercase px-5 py-3">Direccion</th><th className="text-left text-xs font-medium text-text-muted uppercase px-5 py-3">Estado</th><th className="text-right text-xs font-medium text-text-muted uppercase px-5 py-3">Litros</th><th className="text-right text-xs font-medium text-text-muted uppercase px-5 py-3">Pago</th><th className="text-center text-xs font-medium text-text-muted uppercase px-5 py-3">Fotos</th></tr></thead><tbody>{visits.map((v) => { const cfg = visitStatusConfig[v.status] || visitStatusConfig.pendiente; const cust = customers[v.customer_id]; return (<tr key={v.id} className="border-b border-brand-border/30 hover:bg-brand-light/50 transition-colors"><td className="px-5 py-3"><span className="w-7 h-7 rounded-full bg-brand-primary/10 flex items-center justify-center text-xs font-bold text-brand-primary">{v.visit_order}</span></td><td className="px-5 py-3"><p className="text-sm font-medium">{cust?.fantasy_name || v.customer_id}</p></td><td className="px-5 py-3 text-sm text-text-secondary max-w-[200px] truncate">{cust?.address || '—'}</td><td className="px-5 py-3"><span className={'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ' + cfg.color}><span className={'w-1.5 h-1.5 rounded-full ' + cfg.dot} />{cfg.label}</span></td><td className="px-5 py-3 text-sm font-medium text-right">{v.liters_collected > 0 ? v.liters_collected + ' L' : '—'}</td><td className="px-5 py-3 text-sm text-right">{v.payment_amount > 0 ? '$' + v.payment_amount.toLocaleString() : '—'}</td><td className="px-5 py-3 text-center">{v.photos && v.photos.length > 0 ? (<button type="button" onClick={() => setPhotoModal({ visitId: v.id, photos: v.photos! })} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/20 transition-colors"><i className="ri-camera-line" />{v.photos.length}</button>) : (<span className="text-xs text-text-muted">—</span>)}</td></tr>); })}</tbody></table></div>
       </div>
+
+      {photoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setPhotoModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 relative" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold">Fotos de evidencia</h3>
+              <button type="button" onClick={() => setPhotoModal(null)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-brand-light transition-colors"><i className="ri-close-line text-text-muted" /></button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {photoModal.photos.map((photo) => (
+                <a key={photo.public_id} href={photo.url} target="_blank" rel="noopener noreferrer" className="block aspect-square rounded-xl overflow-hidden border border-brand-border/60 hover:border-brand-primary transition-colors">
+                  <img src={photo.url} alt="Foto de visita" className="w-full h-full object-cover" />
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

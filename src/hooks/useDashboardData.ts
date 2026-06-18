@@ -89,12 +89,12 @@ export function useDashboardData(): DashboardData {
         { data: driversData, error: errDrivers },
         { data: maintData, error: errMaint },
       ] = await Promise.all([
-        supabase.from('route_sheets').select('id, total_liters, total_clients').eq('status', 'Completed'),
-        supabase.from('route_sheets').select('id').eq('status', 'In_Progress'),
+        supabase.from('route_sheets').select('id, date, total_liters, total_clients, driver:driver_id(name)').eq('status', 'finalizada'),
+        supabase.from('route_sheets').select('id').eq('status', 'en_curso'),
         supabase.from('customers').select('id').eq('status', 'Active').is('deleted_at', null),
-        supabase.from('trucks').select('id').eq('status', 'On_Route').is('deleted_at', null),
+        supabase.from('trucks').select('id').eq('status', 'en_recorrido').is('deleted_at', null),
         supabase.from('route_sheets').select('id, name, date, status, total_liters, total_clients, driver:driver_id(name), truck:truck_id(plate)').order('date', { ascending: false }).limit(8),
-        supabase.from('drivers').select('id, name').eq('status', 'Active').is('deleted_at', null),
+        supabase.from('drivers').select('id, name').eq('status', 'activo').is('deleted_at', null),
         supabase.from('truck_maintenance').select('id, truck_id, category, status, next_due_date, truck:truck_id(plate, model)').neq('status', 'Completed'),
       ]);
 
