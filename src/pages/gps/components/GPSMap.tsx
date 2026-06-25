@@ -10,48 +10,81 @@ interface GPSMapProps {
 
 function useInterpolatedTrucks(trucks: GPSTruck[]) {
   const [interpolated, setInterpolated] = useState<GPSTruck[]>(trucks);
-  const animRef = useRef<number | null>(null);
-  const startRef = useRef<number | null>(null);
-  const fromRef = useRef<GPSTruck[]>([]);
-  const toRef = useRef<GPSTruck[]>([]);
-  const DURATION = 8000;
+  const animStateRef = useRef<Map<number, {
+    fromLat: number; fromLng: number;
+    toLat: number; toLng: number;
+    startTime: number; duration: number;
+  }>>(new Map());
+  const truckDataRef = useRef<Map<number, GPSTruck>>(new Map());
+  const rafRef = useRef<number | null>(null);
+
+  const ease = (p: number) => p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
 
   useEffect(() => {
-    if (trucks.length === 0) return;
-    fromRef.current = interpolated.length > 0 ? interpolated : trucks;
-    toRef.current = trucks;
-    startRef.current = null;
+    const now = performance.now();
 
-    if (animRef.current) cancelAnimationFrame(animRef.current);
+    trucks.forEach(truck => {
+      truckDataRef.current.set(truck.deviceId, truck);
+      const existing = animStateRef.current.get(truck.deviceId);
 
-    const animate = (timestamp: number) => {
-      if (!startRef.current) startRef.current = timestamp;
-      const progress = Math.min((timestamp - startRef.current) / DURATION, 1);
-      const ease = progress < 0.5
-        ? 2 * progress * progress
-        : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+      if (!existing) {
+        animStateRef.current.set(truck.deviceId, {
+          fromLat: truck.lat, fromLng: truck.lng,
+          toLat: truck.lat, toLng: truck.lng,
+          startTime: now, duration: 0,
+        });
+        return;
+      }
 
-      setInterpolated(toRef.current.map(truck => {
-        const from = fromRef.current.find(f => f.deviceId === truck.deviceId);
-        if (!from) return truck;
-        return {
-          ...truck,
-          lat: from.lat + (truck.lat - from.lat) * ease,
-          lng: from.lng + (truck.lng - from.lng) * ease,
-        };
-      }));
+      const targetChanged = existing.toLat !== truck.lat || existing.toLng !== truck.lng;
+      if (!targetChanged) return;
 
-      if (progress < 1) animRef.current = requestAnimationFrame(animate);
+      const elapsed = now - existing.startTime;
+      const progress = existing.duration > 0 ? Math.min(elapsed / existing.duration, 1) : 1;
+      const currentLat = existing.fromLat + (existing.toLat - existing.fromLat) * ease(progress);
+      const currentLng = existing.fromLng + (existing.toLng - existing.fromLng) * ease(progress);
+
+      animStateRef.current.set(truck.deviceId, {
+        fromLat: currentLat, fromLng: currentLng,
+        toLat: truck.lat, toLng: truck.lng,
+        startTime: now,
+        duration: truck.transitionDuration || 0,
+      });
+    });
+  }, [trucks]);
+
+  useEffect(() => {
+    const animate = () => {
+      const now = performance.now();
+      const result: GPSTruck[] = [];
+
+      truckDataRef.current.forEach((truckData, deviceId) => {
+        const anim = animStateRef.current.get(deviceId);
+        if (!anim) { result.push(truckData); return; }
+
+        const elapsed = now - anim.startTime;
+        const progress = anim.duration > 0 ? Math.min(elapsed / anim.duration, 1) : 1;
+        const eased = ease(progress);
+
+        result.push({
+          ...truckData,
+          lat: anim.fromLat + (anim.toLat - anim.fromLat) * eased,
+          lng: anim.fromLng + (anim.toLng - anim.fromLng) * eased,
+        });
+      });
+
+      setInterpolated(result);
+      rafRef.current = requestAnimationFrame(animate);
     };
 
-    animRef.current = requestAnimationFrame(animate);
-    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
-  }, [trucks]);
+    rafRef.current = requestAnimationFrame(animate);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, []);
 
   return interpolated;
 }
 
-const getMarkerIcon = (status: string, isSelected: boolean) => {
+const getMarkerIcon = (status: string, isSelected: boolean, facingRight: boolean) => {
   const color = status === 'online' ? '#10b981'
               : status === 'ack'    ? '#f59e0b'
               :                      '#ef4444';
@@ -98,6 +131,8 @@ const getMarkerIcon = (status: string, isSelected: boolean) => {
           display: flex;
           align-items: center;
           justify-content: center;
+          transform: scaleX(${facingRight ? 1 : -1});
+          transition: transform 0.4s ease;
         ">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="white">
             <path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zm-.5 1.5l1.96 2.5H17V9.5h2.5zM6 18c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm2.22-3c-.55-.61-1.35-1-2.22-1s-1.67.39-2.22 1H3V6h12v9H8.22zm9.78 3c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/>
@@ -113,12 +148,30 @@ const getMarkerIcon = (status: string, isSelected: boolean) => {
 
 function MapUpdater({ trucks, selectedTruckId }: { trucks: GPSTruck[]; selectedTruckId: number | null }) {
   const map = useMap();
+  const flownToRef = useRef<number | null>(null);
+
   useEffect(() => {
-    if (selectedTruckId !== null) {
-      const truck = trucks.find(t => t.deviceId === selectedTruckId);
-      if (truck) map.flyTo([truck.lat, truck.lng], 15, { duration: 1.2 });
+    if (selectedTruckId === null) {
+      flownToRef.current = null;
+      return;
     }
-  }, [selectedTruckId, trucks, map]);
+
+    const truck = trucks.find(t => t.deviceId === selectedTruckId);
+    if (!truck) return;
+
+    const latlng: [number, number] = [truck.lat, truck.lng];
+
+    if (flownToRef.current !== selectedTruckId) {
+      map.flyTo(latlng, 15, { duration: 1.2 });
+      flownToRef.current = selectedTruckId;
+      return;
+    }
+
+    if (!map.getBounds().contains(latlng)) {
+      map.panTo(latlng, { animate: true, duration: 0.8 });
+    }
+  }, [trucks, selectedTruckId, map]);
+
   return null;
 }
 
@@ -140,7 +193,7 @@ export default function GPSMap({ trucks, selectedTruckId }: GPSMapProps) {
         <Marker
           key={truck.deviceId}
           position={[truck.lat, truck.lng]}
-          icon={getMarkerIcon(truck.status, truck.deviceId === selectedTruckId)}
+          icon={getMarkerIcon(truck.status, truck.deviceId === selectedTruckId, truck.facingRight)}
         >
           <Popup className="gps-popup">
             <div style={{ fontFamily: 'inherit', minWidth: '160px' }}>
@@ -177,7 +230,7 @@ export default function GPSMap({ trucks, selectedTruckId }: GPSMapProps) {
           </Popup>
         </Marker>
       ))}
-      <MapUpdater trucks={trucks} selectedTruckId={selectedTruckId} />
+      <MapUpdater trucks={interpolatedTrucks} selectedTruckId={selectedTruckId} />
     </MapContainer>
   );
 }
