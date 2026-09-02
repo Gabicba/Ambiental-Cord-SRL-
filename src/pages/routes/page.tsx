@@ -1,40 +1,47 @@
 import { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { mockRoutes, routeStatuses } from '@/mocks/routes';
-import { mockTrucks } from '@/mocks/trucks';
-import { mockDrivers } from '@/mocks/drivers';
-import { mockCustomers } from '@/mocks/customers';
-import { mockRouteVisits } from '@/mocks/route_visits';
-import { getCompanionById } from '@/mocks/companions';
+import { useRouteSheets, routeStatuses } from '@/hooks/useRouteSheets';
 
 type FilterStatus = 'all' | 'Pending' | 'In_Progress' | 'Completed' | 'Canceled';
 
 export default function RoutesPage() {
   const navigate = useNavigate();
+  const { routes, loading, error } = useRouteSheets();
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [search, setSearch] = useState('');
 
-  const routesWithStats = useMemo(() => {
-    return mockRoutes.map((route) => {
-      const visits = mockRouteVisits.filter((v) => v.route_id === route.id);
-      const completed = visits.filter((v) => v.status === 'Visited').length;
-      const total = visits.length || route.total_clients;
-      const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
-      const truck = mockTrucks.find((t) => t.id === route.truck_id);
-      const driver = mockDrivers.find((d) => d.id === route.driver_id);
-      return { ...route, visits, completed, total, progress, truck, driver };
-    });
-  }, []);
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-brand-primary/20 border-t-brand-primary rounded-full animate-spin" />
+          <p className="text-sm text-text-secondary">Cargando rutas...</p>
+        </div>
+      </div>
+    );
+  }
 
-  const filtered = routesWithStats.filter((r) => {
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md text-center">
+          <i className="ri-error-warning-line text-3xl text-red-500" />
+          <p className="text-sm text-red-700 mt-2">{error}</p>
+          <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 whitespace-nowrap" type="button">Reintentar</button>
+        </div>
+      </div>
+    );
+  }
+
+  const filtered = routes.filter((r) => {
     if (filter !== 'all' && r.status !== filter) return false;
     if (search) {
       const q = search.toLowerCase();
       return (
         r.name.toLowerCase().includes(q) ||
         r.id.toLowerCase().includes(q) ||
-        r.driver?.name.toLowerCase().includes(q) ||
-        r.truck?.plate.toLowerCase().includes(q)
+        (r.driver_name || '').toLowerCase().includes(q) ||
+        (r.truck_plate || '').toLowerCase().includes(q)
       );
     }
     return true;
@@ -134,22 +141,9 @@ export default function RoutesPage() {
                       </div>
                     </td>
                     <td className="px-5 py-3 text-sm text-text-secondary">{route.date}</td>
-                    <td className="px-5 py-3 text-sm text-text-secondary">
-                      {route.truck ? (
-                        <div className="flex items-center gap-1.5">
-                          <i className="ri-truck-line text-text-muted" />
-                          {route.truck.plate}
-                        </div>
-                      ) : (
-                        '-'
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-sm text-text-secondary">
-                      {route.driver ? route.driver.name : '-'}
-                    </td>
-                    <td className="px-5 py-3 text-sm text-text-secondary">
-                      {getCompanionById(route.companion_id)?.full_name || '-'}
-                    </td>
+                    <td className="px-5 py-3 text-sm text-text-secondary">{route.truck_plate || '-'}</td>
+                    <td className="px-5 py-3 text-sm text-text-secondary">{route.driver_name || '-'}</td>
+                    <td className="px-5 py-3 text-sm text-text-secondary">{route.companion_name || '-'}</td>
                     <td className="px-5 py-3">
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${statusConfig?.color}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${
@@ -161,23 +155,7 @@ export default function RoutesPage() {
                         {statusConfig?.label}
                       </span>
                     </td>
-                    <td className="px-5 py-3">
-                      {route.status !== 'Pending' && route.status !== 'Canceled' ? (
-                        <div className="flex items-center gap-2">
-                          <div className="w-20 h-1.5 bg-brand-light rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all ${
-                                route.progress === 100 ? 'bg-emerald-500' : 'bg-blue-500'
-                              }`}
-                              style={{ width: `${route.progress}%` }}
-                            />
-                          </div>
-                          <span className="text-xs text-text-muted">{route.completed}/{route.total}</span>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-text-muted">-</span>
-                      )}
-                    </td>
+                    <td className="px-5 py-3"><span className="text-xs text-text-muted">{route.total_clients} clientes</span></td>
                     <td className="px-5 py-3 text-sm font-medium text-text-primary text-right">
                       {route.total_liters > 0 ? `${route.total_liters.toLocaleString()} L` : '-'}
                     </td>

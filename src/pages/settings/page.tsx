@@ -1,11 +1,32 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 
 export default function SettingsPage() {
-  const [oilPrice, setOilPrice] = useState(800);
+  const [oilPrice, setOilPrice] = useState(25);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
 
-  const handleSaveOilPrice = () => {
-    // Mock save - in real app this would update Supabase
-    alert(`Precio del aceite actualizado: $${oilPrice}/L`);
+  useEffect(() => {
+    const loadPrice = async () => {
+      const { data } = await supabase.from('settings').select('value').eq('key', 'oil_price_per_liter').single();
+      if (data) setOilPrice(Number(data.value));
+    };
+    loadPrice();
+  }, []);
+
+  const handleSaveOilPrice = async () => {
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      const { error: err } = await supabase.from('settings').upsert({ key: 'oil_price_per_liter', value: String(oilPrice) }, { onConflict: 'key' });
+      if (err) throw err;
+      setSaveMsg('Precio guardado correctamente');
+      setTimeout(() => setSaveMsg(''), 3000);
+    } catch {
+      setSaveMsg('Error al guardar');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -33,13 +54,15 @@ export default function SettingsPage() {
                 />
               </div>
               <p className="text-xs text-text-muted mt-1">Este precio se usa para calcular pagos automaticos en la app del chofer</p>
+              {saveMsg && <p className={`text-xs mt-1 ${saveMsg.includes('Error') ? 'text-red-600' : 'text-emerald-600'}`}>{saveMsg}</p>}
             </div>
             <button
               onClick={handleSaveOilPrice}
               type="button"
-              className="w-full py-2 bg-brand-primary text-white rounded-lg text-sm font-medium hover:bg-brand-primary/90 transition-colors whitespace-nowrap"
+              disabled={saving}
+              className="w-full py-2 bg-brand-primary text-white rounded-lg text-sm font-medium hover:bg-brand-primary/90 transition-colors disabled:opacity-50 whitespace-nowrap"
             >
-              Guardar Precio
+              {saving ? 'Guardando...' : 'Guardar Precio'}
             </button>
           </div>
         </div>

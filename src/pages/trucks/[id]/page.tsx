@@ -1,626 +1,180 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { mockTrucks, truckStatuses, maintenanceTypes } from '@/mocks/trucks';
-import { mockDrivers } from '@/mocks/drivers';
-import { useSharedMaintenance, getMergedTruckData } from '@/hooks/useSharedMaintenance';
+import { supabase } from '@/lib/supabase';
+import { useTrucks, truckStatuses } from '@/hooks/useTrucks';
+import { useDrivers } from '@/hooks/useDrivers';
+import { FuelRecord } from '@/hooks/useFuel';
 
-const tabs = [
-  { id: 'general', label: 'General' },
-  { id: 'maintenance', label: 'Mantenimiento' },
-  { id: 'routes', label: 'Rutas Asignadas' },
-  { id: 'gps', label: 'GPS en Vivo' },
-  { id: 'documents', label: 'Documentos' },
-];
+interface TruckData {
+  id: string; plate: string; model: string | null; assigned_driver_id: string | null;
+  gps_device_id: string | null; status: string; capacity_liters: number; year: number | null;
+  last_maintenance: string | null; next_maintenance: string | null;
+  km_total: number; km_since_maintenance: number; vin: string | null; fuel_type: string;
+  insurance_expiry: string | null; technical_revision_expiry: string | null;
+  notes: string | null; created_at: string; updated_at: string; deleted_at: string | null;
+}
 
-const routeStatuses: Record<string, { label: string; color: string; dot: string }> = {
-  Completed: { label: 'Completada', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
-  In_Progress: { label: 'En Progreso', color: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500' },
-  Pending: { label: 'Pendiente', color: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
-  Canceled: { label: 'Cancelada', color: 'bg-red-50 text-red-700 border-red-200', dot: 'bg-red-500' },
-};
+interface DriverSimple { id: string; name: string; dni: string | null; license_type: string | null; status: string; }
+
+function getDocStatus(dateStr: string | null): string {
+  if (!dateStr) return 'Unknown';
+  const d = new Date(dateStr); d.setHours(0,0,0,0);
+  const now = new Date(); now.setHours(0,0,0,0);
+  if (d < now) return 'Expired';
+  const diff = (d.getTime() - now.getTime()) / (1000*60*60*24);
+  if (diff < 30) return 'Near';
+  return 'Active';
+}
 
 const docStatuses: Record<string, { label: string; color: string }> = {
   Active: { label: 'Vigente', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   Expired: { label: 'Vencido', color: 'bg-red-50 text-red-700 border-red-200' },
   Near: { label: 'Proximo a vencer', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  Unknown: { label: 'Sin datos', color: 'bg-gray-50 text-gray-700 border-gray-200' },
 };
 
-const maintCategories = [
-  { value: 'oil_change', label: 'Cambio de aceite', interval: 3 },
-  { value: 'battery', label: 'Bateria', interval: 6 },
-  { value: 'tires', label: 'Cubiertas', interval: 12 },
-  { value: 'brakes', label: 'Frenos', interval: 6 },
-  { value: 'itv', label: 'ITV / RTO', interval: 12 },
-  { value: 'insurance', label: 'Seguro', interval: 12 },
-  { value: 'general', label: 'Mantenimiento general', interval: 4 },
+const tabs = [
+  { id: 'general', label: 'General' }, { id: 'documents', label: 'Documentos' },
+  { id: 'maintenance', label: 'Mantenimiento' }, { id: 'routes', label: 'Rutas' }, { id: 'gps', label: 'GPS' }, { id: 'fuel', label: 'Combustible' },
 ];
 
-function getDocStatus(dateStr: string): string {
-  const d = new Date(dateStr + 'T12:00:00');
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  const diff = d.getTime() - now.getTime();
-  const days = diff / (1000 * 60 * 60 * 24);
-  if (days < 0) return 'Expired';
-  if (days < 30) return 'Near';
-  return 'Active';
-}
-
-function formatDateInput(d: Date): string {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function addMonthsToDate(dateStr: string, months: number): string {
-  const d = new Date(dateStr + 'T12:00:00');
-  d.setMonth(d.getMonth() + months);
-  return formatDateInput(d);
-}
-
 export default function TruckDetailPage() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { deleteTruck } = useTrucks();
+  const { drivers } = useDrivers();
   const [activeTab, setActiveTab] = useState('general');
-  const { addAlert } = useSharedMaintenance();
+  const [loading, setLoading] = useState(true);
+  const [truck, setTruck] = useState<TruckData | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Get merged data from localStorage + mocks
-  const baseTruck = getMergedTruckData(id || '');
-  const [truck, setTruck] = useState(baseTruck ? JSON.parse(JSON.stringify(baseTruck)) : null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({ plate: '', model: '', year: '', capacity_liters: 0, vin: '', fuel_type: 'Diesel', gps_device_id: '', status: '', assigned_driver_id: '', insurance_expiry: '', technical_revision_expiry: '', notes: '', km_total: 0 });
+  const [saving, setSaving] = useState(false);
 
-  // Modal state
-  const [showNewMaint, setShowNewMaint] = useState(false);
-  const [maintForm, setMaintForm] = useState({
-    category: 'oil_change',
-    type: 'Mantenimiento Preventivo',
-    date: formatDateInput(new Date()),
-    km: 0,
-    cost: 0,
-    provider: '',
-    description: '',
-    interval_months: 3,
-    status: 'Completed' as string,
-  });
+  const [fuelRecords, setFuelRecords] = useState<FuelRecord[]>([]);
+  const [fuelLoading, setFuelLoading] = useState(false);
+  const [fuelError, setFuelError] = useState<string | null>(null);
 
-  // Force re-render when localStorage changes from other tabs
-  const [, setTick] = useState(0);
-  const reloadFromStorage = useCallback(() => {
-    const merged = getMergedTruckData(id || '');
-    if (merged) {
-      setTruck(JSON.parse(JSON.stringify(merged)));
-    }
-    setTick((t) => t + 1);
+  const fetchData = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const { data: d, error: e } = await supabase.from('trucks').select('*').eq('id', id).is('deleted_at', null).maybeSingle();
+      if (e) throw e;
+      if (!d) { setError('No encontrado'); setLoading(false); return; }
+      setTruck(d as TruckData);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Error'); }
+    finally { setLoading(false); }
   }, [id]);
 
-  const assignedDriver = truck?.assigned_driver_id
-    ? mockDrivers.find((d) => d.id === truck.assigned_driver_id)
-    : null;
-
-  if (!truck) {
-    return (
-      <div className="space-y-4">
-        <button
-          type="button"
-          onClick={() => navigate('/trucks')}
-          className="text-sm text-text-secondary hover:text-brand-primary transition-colors"
-        >
-          ← Volver a Camiones
-        </button>
-        <div className="bg-white rounded-xl p-8 text-center border border-brand-border/60">
-          <i className="ri-truck-line text-5xl text-text-muted mb-4" />
-          <h2 className="text-xl font-semibold text-text-primary">Camion no encontrado</h2>
-          <p className="text-sm text-text-secondary mt-2">El camion solicitado no existe.</p>
-        </div>
-      </div>
-    );
-  }
-
-  const statusConfig = truckStatuses[truck.status as keyof typeof truckStatuses];
-
-  const totalMaintCost = truck.maintenance_history.reduce((sum: number, m: { cost: number }) => sum + m.cost, 0);
-  const completedRoutes = truck.assigned_routes.filter((r: { status: string }) => r.status === 'Completed');
-  const inProgressRoutes = truck.assigned_routes.filter((r: { status: string }) => r.status === 'In_Progress');
-
-  function handleSaveMaintenance() {
-    const catLabel = maintCategories.find((c) => c.value === maintForm.category)?.label || maintForm.category;
-    const nextDate = addMonthsToDate(maintForm.date, maintForm.interval_months);
-
-    const newMaint = {
-      id: `MNT-${Date.now()}`,
-      date: maintForm.date,
-      type: maintForm.type,
-      km: maintForm.km,
-      cost: maintForm.cost,
-      description: `${catLabel}: ${maintForm.description}`,
-      provider: maintForm.provider || 'Sin proveedor',
-      status: maintForm.status,
-      category: maintForm.category,
-      next_due_date: nextDate,
-      interval_months: maintForm.interval_months,
-    };
-
-    // Update local truck state
-    setTruck((prev: typeof truck) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        maintenance_history: [newMaint, ...prev.maintenance_history],
-        last_maintenance: maintForm.date,
-        next_maintenance: nextDate,
-        km_since_maintenance: 0,
-      };
-    });
-
-    // Persist merged truck data to localStorage for other pages
+  const fetchFuelRecords = useCallback(async () => {
+    if (!id) return;
+    setFuelLoading(true);
+    setFuelError(null);
     try {
-      const raw = localStorage.getItem('uco_trucks_data_v1');
-      const trucksData = raw ? JSON.parse(raw) : {};
-      const existing = trucksData[truck.id]?.maintenance_history || [];
-      trucksData[truck.id] = {
-        ...(trucksData[truck.id] || {}),
-        maintenance_history: [newMaint, ...existing],
-      };
-      localStorage.setItem('uco_trucks_data_v1', JSON.stringify(trucksData));
-    } catch {
-      // ignore
+      const { data, error: err } = await supabase
+        .from('fuel_records')
+        .select('*')
+        .eq('truck_id', id)
+        .order('date', { ascending: false })
+        .limit(500);
+      if (err) throw err;
+      setFuelRecords((data || []) as unknown as FuelRecord[]);
+    } catch (e) {
+      setFuelError(e instanceof Error ? e.message : 'Error al cargar historial de combustible');
+    } finally {
+      setFuelLoading(false);
     }
+  }, [id]);
 
-    // Sync alert to shared maintenance system
-    addAlert({
-      truck_id: truck.id,
-      truck_plate: truck.plate,
-      truck_model: truck.model,
-      category: maintForm.category as import('@/mocks/maintenance').MaintenanceCategory,
-      last_done_date: maintForm.date,
-      next_due_date: nextDate,
-      interval_months: maintForm.interval_months,
-      current_km: maintForm.km,
-      notes: newMaint.description,
-      provider: newMaint.provider,
-      cost: newMaint.cost,
-    });
+  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { if (activeTab === 'fuel') fetchFuelRecords(); }, [activeTab, fetchFuelRecords]);
 
-    setShowNewMaint(false);
-    setMaintForm({
-      category: 'oil_change',
-      type: 'Mantenimiento Preventivo',
-      date: formatDateInput(new Date()),
-      km: 0,
-      cost: 0,
-      provider: '',
-      description: '',
-      interval_months: 3,
-      status: 'Completed',
-    });
-  }
+  if (loading) return (<div className="flex items-center justify-center py-20"><div className="flex flex-col items-center gap-4"><div className="w-10 h-10 border-4 border-brand-primary/20 border-t-brand-primary rounded-full animate-spin" /><p className="text-sm text-text-secondary">Cargando...</p></div></div>);
+  if (error || !truck) return (<div className="space-y-4"><button type="button" onClick={() => navigate('/trucks')} className="text-sm text-text-secondary hover:text-brand-primary transition-colors">← Volver a Camiones</button><div className="bg-white rounded-xl p-8 text-center border border-brand-border/60"><i className="ri-truck-line text-5xl text-text-muted mb-4" /><h2 className="text-xl font-semibold text-text-primary">Camion no encontrado</h2></div></div>);
+
+  const statusCfg = truckStatuses[truck.status as keyof typeof truckStatuses];
+  const driver = truck.assigned_driver_id ? drivers.find((d) => d.id === truck.assigned_driver_id) : null;
+
+  const openEdit = () => {
+    setEditForm({ plate: truck.plate, model: truck.model || '', year: truck.year ? String(truck.year) : '', capacity_liters: truck.capacity_liters, vin: truck.vin || '', fuel_type: truck.fuel_type, gps_device_id: truck.gps_device_id || '', status: truck.status, assigned_driver_id: truck.assigned_driver_id || '', insurance_expiry: truck.insurance_expiry || '', technical_revision_expiry: truck.technical_revision_expiry || '', notes: truck.notes || '', km_total: truck.km_total });
+    setShowEditModal(true);
+  };
+
+  const saveEdit = async () => {
+    setSaving(true);
+    try {
+      const { error: err } = await supabase.from('trucks').update({
+        plate: editForm.plate, model: editForm.model || null, year: editForm.year ? parseInt(editForm.year) : null,
+        capacity_liters: editForm.capacity_liters, vin: editForm.vin || null, fuel_type: editForm.fuel_type,
+        gps_device_id: editForm.gps_device_id || null, status: editForm.status, assigned_driver_id: editForm.assigned_driver_id || null,
+        insurance_expiry: editForm.insurance_expiry || null, technical_revision_expiry: editForm.technical_revision_expiry || null,
+        notes: editForm.notes || null, km_total: editForm.km_total, updated_at: new Date().toISOString(),
+      }).eq('id', truck.id);
+      if (err) throw err;
+      setTruck({ ...truck, ...editForm, year: editForm.year ? parseInt(editForm.year) : null, updated_at: new Date().toISOString() } as TruckData);
+      setShowEditModal(false);
+    } catch (e) { alert(e instanceof Error ? e.message : 'Error'); }
+    finally { setSaving(false); }
+  };
+
+  const handleDeactivate = async () => {
+    if (!window.confirm('Dar de baja este camion?')) return;
+    try { await deleteTruck(truck.id); navigate('/trucks'); }
+    catch (e) { alert(e instanceof Error ? e.message : 'Error'); }
+  };
+
+  const inputCls = 'w-full px-4 py-2.5 rounded-lg bg-brand-light border border-brand-border text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-green/30';
+  const selectCls = 'w-full px-4 py-2.5 rounded-lg bg-brand-light border border-brand-border text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-green/30 appearance-none cursor-pointer';
+  const labelCls = 'text-xs font-medium text-text-muted uppercase block mb-1.5';
 
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <button
-            type="button"
-            onClick={() => navigate('/trucks')}
-            className="text-xs text-text-secondary hover:text-brand-primary transition-colors mb-2"
-          >
-            ← Volver a Camiones
-          </button>
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-text-primary">{truck.plate}</h1>
-            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${statusConfig?.color}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${truck.status === 'Active' ? 'bg-emerald-500' : truck.status === 'On_Route' ? 'bg-blue-500' : truck.status === 'Maintenance' ? 'bg-amber-500' : 'bg-gray-500'}`} />
-              {statusConfig?.label}
-            </span>
-          </div>
+          <button type="button" onClick={() => navigate('/trucks')} className="text-xs text-text-secondary hover:text-brand-primary transition-colors mb-2">← Volver a Camiones</button>
+          <div className="flex items-center gap-3 flex-wrap"><h1 className="text-2xl font-bold text-text-primary">{truck.plate}</h1><span className={'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ' + (statusCfg?.color || '')}><span className={'w-1.5 h-1.5 rounded-full ' + (truck.status === 'Active' ? 'bg-emerald-500' : truck.status === 'On_Route' ? 'bg-blue-500' : truck.status === 'Maintenance' ? 'bg-amber-500' : 'bg-gray-500')} />{statusCfg?.label}</span></div>
           <p className="text-sm text-text-secondary mt-1">{truck.model}</p>
         </div>
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 px-3 py-2 border border-brand-border rounded-lg text-sm font-medium text-text-secondary hover:border-brand-green hover:text-brand-green transition-colors whitespace-nowrap"
-        >
-          <i className="ri-edit-line" />
-          Editar
-        </button>
+        <div className="flex gap-2">
+          <button type="button" onClick={handleDeactivate} className="px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors whitespace-nowrap"><i className="ri-close-circle-line mr-1.5" />Dar de Baja</button>
+          <button type="button" onClick={openEdit} className="inline-flex items-center gap-2 px-3 py-2 border border-brand-border rounded-lg text-sm font-medium text-text-secondary hover:border-brand-green hover:text-brand-green transition-colors whitespace-nowrap"><i className="ri-edit-line" />Editar</button>
+        </div>
       </div>
 
-      {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-white rounded-xl p-4 border border-brand-border/60">
-          <div className="flex items-center gap-2 mb-1">
-            <i className="ri-route-line text-brand-green text-lg" />
-            <p className="text-xs text-text-muted">Rutas Completadas</p>
-          </div>
-          <p className="text-xl font-bold text-text-primary">{completedRoutes.length}</p>
-          <p className="text-xs text-text-muted mt-1">{inProgressRoutes.length} en progreso</p>
-        </div>
-        <div className="bg-white rounded-xl p-4 border border-brand-border/60">
-          <div className="flex items-center gap-2 mb-1">
-            <i className="ri-gas-station-line text-brand-primary text-lg" />
-            <p className="text-xs text-text-muted">Capacidad</p>
-          </div>
-          <p className="text-xl font-bold text-text-primary">{truck.capacity_liters.toLocaleString()} L</p>
-          <p className="text-xs text-text-muted mt-1">Tanque de acero inoxidable</p>
-        </div>
-        <div className="bg-white rounded-xl p-4 border border-brand-border/60">
-          <div className="flex items-center gap-2 mb-1">
-            <i className="ri-speed-line text-brand-primary text-lg" />
-            <p className="text-xs text-text-muted">Kilometraje</p>
-          </div>
-          <p className="text-xl font-bold text-text-primary">{truck.km_total.toLocaleString()} km</p>
-          <p className="text-xs text-text-muted mt-1">+{truck.km_since_maintenance.toLocaleString()} desde ult. service</p>
-        </div>
-        <div className="bg-white rounded-xl p-4 border border-brand-border/60">
-          <div className="flex items-center gap-2 mb-1">
-            <i className="ri-tools-line text-brand-primary text-lg" />
-            <p className="text-xs text-text-muted">Costo Mantenimiento</p>
-          </div>
-          <p className="text-xl font-bold text-text-primary">${totalMaintCost.toLocaleString('es-AR')}</p>
-          <p className="text-xs text-text-muted mt-1">{truck.maintenance_history.length} intervenciones</p>
-        </div>
+        <div className="bg-white rounded-xl p-4 border border-brand-border/60"><p className="text-xs text-text-muted">Capacidad</p><p className="text-xl font-bold text-text-primary">{truck.capacity_liters.toLocaleString()} L</p></div>
+        <div className="bg-white rounded-xl p-4 border border-brand-border/60"><p className="text-xs text-text-muted">Kilometraje</p><p className="text-xl font-bold text-text-primary">{truck.km_total.toLocaleString()} km</p></div>
+        <div className="bg-white rounded-xl p-4 border border-brand-border/60"><p className="text-xs text-text-muted">Anio</p><p className="text-xl font-bold text-text-primary">{truck.year || '—'}</p></div>
+        <div className="bg-white rounded-xl p-4 border border-brand-border/60"><p className="text-xs text-text-muted">Combustible</p><p className="text-xl font-bold text-text-primary">{truck.fuel_type}</p></div>
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-brand-border/60">
-        <div className="flex gap-1 overflow-x-auto">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => {
-                setActiveTab(tab.id);
-                if (tab.id === 'maintenance') reloadFromStorage();
-              }}
-              className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors relative ${
-                activeTab === tab.id ? 'text-brand-green' : 'text-text-secondary hover:text-text-primary'
-              }`}
-            >
-              {tab.label}
-              {activeTab === tab.id && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-green rounded-full" />
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
+      <div className="border-b border-brand-border/60"><div className="flex gap-1 overflow-x-auto">{tabs.map((tab) => (<button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={'px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors relative ' + (activeTab === tab.id ? 'text-brand-green' : 'text-text-secondary hover:text-text-primary')}>{tab.label}{activeTab === tab.id && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-green rounded-full" />}</button>))}</div></div>
 
-      {/* Tab Content */}
       <div className="bg-white rounded-xl border border-brand-border/60 p-5">
         {activeTab === 'general' && (
           <div className="space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Informacion tecnica */}
               <div className="space-y-4">
                 <h3 className="text-base font-semibold text-text-primary">Informacion Tecnica</h3>
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-text-muted">Modelo</p>
-                    <p className="text-sm font-medium text-text-primary">{truck.model}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-text-muted">Anio</p>
-                    <p className="text-sm font-medium text-text-primary">{truck.year}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-text-muted">VIN</p>
-                    <p className="text-sm font-medium text-text-primary">{truck.vin}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-text-muted">Tipo de Combustible</p>
-                    <p className="text-sm font-medium text-text-primary">{truck.fuel_type}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-text-muted">Capacidad</p>
-                    <p className="text-sm font-medium text-text-primary">{truck.capacity_liters.toLocaleString()} L</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-text-muted">Kilometraje Total</p>
-                    <p className="text-sm font-medium text-text-primary">{truck.km_total.toLocaleString()} km</p>
-                  </div>
+                  <div><p className="text-xs text-text-muted">Modelo</p><p className="text-sm font-medium text-text-primary">{truck.model}</p></div>
+                  <div><p className="text-xs text-text-muted">Anio</p><p className="text-sm font-medium text-text-primary">{truck.year || '—'}</p></div>
+                  <div><p className="text-xs text-text-muted">VIN</p><p className="text-sm font-medium text-text-primary">{truck.vin || '—'}</p></div>
+                  <div><p className="text-xs text-text-muted">Combustible</p><p className="text-sm font-medium text-text-primary">{truck.fuel_type}</p></div>
+                  <div><p className="text-xs text-text-muted">Capacidad</p><p className="text-sm font-medium text-text-primary">{truck.capacity_liters.toLocaleString()} L</p></div>
+                  <div><p className="text-xs text-text-muted">Kilometraje</p><p className="text-sm font-medium text-text-primary">{truck.km_total.toLocaleString()} km</p></div>
+                  <div><p className="text-xs text-text-muted">GPS</p><p className="text-sm font-medium text-text-primary">{truck.gps_device_id || '—'}</p></div>
+                  <div><p className="text-xs text-text-muted">Desde ultimo service</p><p className="text-sm font-medium text-text-primary">{truck.km_since_maintenance.toLocaleString()} km</p></div>
                 </div>
               </div>
-
-              {/* Documentos del vehiculo */}
               <div className="space-y-4">
-                <h3 className="text-base font-semibold text-text-primary">Documentacion del Vehiculo</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-brand-light rounded-lg border border-brand-border/40">
-                    <div>
-                      <p className="text-sm font-medium text-text-primary">Seguro Vehicular</p>
-                      <p className="text-xs text-text-muted">Vence: {truck.insurance_expiry}</p>
-                    </div>
-                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium border ${docStatuses[getDocStatus(truck.insurance_expiry)].color}`}>
-                      {docStatuses[getDocStatus(truck.insurance_expiry)].label}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-brand-light rounded-lg border border-brand-border/40">
-                    <div>
-                      <p className="text-sm font-medium text-text-primary">Revision Tecnica</p>
-                      <p className="text-xs text-text-muted">Vence: {truck.technical_revision_expiry}</p>
-                    </div>
-                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium border ${docStatuses[getDocStatus(truck.technical_revision_expiry)].color}`}>
-                      {docStatuses[getDocStatus(truck.technical_revision_expiry)].label}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Conductor asignado */}
-            <div className="pt-4 border-t border-brand-border/40">
-              <h3 className="text-base font-semibold text-text-primary mb-3">Conductor Asignado</h3>
-              {assignedDriver ? (
-                <div className="flex items-center gap-4 p-4 bg-brand-light rounded-xl border border-brand-border/40">
-                  <div className="w-12 h-12 rounded-full bg-brand-primary/10 flex items-center justify-center text-base font-bold text-brand-primary flex-shrink-0">
-                    {assignedDriver.name.split(' ').map((n: string) => n[0]).join('')}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-text-primary">{assignedDriver.name}</p>
-                    <p className="text-xs text-text-muted">{assignedDriver.dni} · Licencia {assignedDriver.license_type}</p>
-                  </div>
-                  <div className="text-right hidden sm:block">
-                    <p className="text-sm font-semibold text-text-primary">{assignedDriver.routes_completed} rutas</p>
-                    <p className="text-xs text-text-muted">{assignedDriver.total_liters.toLocaleString()} L recolectados</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/drivers/${assignedDriver.id}`)}
-                    className="text-brand-green text-sm font-medium hover:underline whitespace-nowrap"
-                  >
-                    Ver Perfil →
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                  <i className="ri-user-line text-xl text-text-muted" />
-                  <div>
-                    <p className="text-sm text-text-secondary">Sin conductor asignado</p>
-                    <p className="text-xs text-text-muted">Asigne un conductor desde el panel de personal</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Observaciones */}
-            {truck.notes && (
-              <div className="pt-4 border-t border-brand-border/40">
-                <h3 className="text-base font-semibold text-text-primary mb-2">Observaciones</h3>
-                <p className="text-sm text-text-secondary">{truck.notes}</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'maintenance' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-semibold text-text-primary">Historial de Mantenimiento</h3>
-                <p className="text-xs text-text-muted mt-0.5">
-                  Registro completo: ideal para valuacion de reventa y garantias
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowNewMaint(true)}
-                className="inline-flex items-center gap-2 px-3 py-2 bg-brand-green text-white rounded-lg text-sm font-medium hover:bg-brand-green/90 transition-colors whitespace-nowrap"
-              >
-                <i className="ri-add-line" />
-                Nuevo Mantenimiento
-              </button>
-            </div>
-            <div className="space-y-3">
-              {truck.maintenance_history.map((maint: {
-                id: string;
-                type: string;
-                date: string;
-                description: string;
-                provider: string;
-                km: number;
-                cost: number;
-                status: string;
-                next_due_date?: string;
-                interval_months?: number;
-              }) => {
-                const typeConfig = maintenanceTypes[maint.type as keyof typeof maintenanceTypes];
-                return (
-                  <div key={maint.id} className="p-4 border border-brand-border/40 rounded-xl hover:border-brand-green/30 transition-colors">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${typeConfig?.color}`}>
-                            {typeConfig?.label}
-                          </span>
-                          <p className="text-xs text-text-muted">{maint.date}</p>
-                        </div>
-                        <p className="text-sm font-semibold text-text-primary">{maint.description}</p>
-                        <p className="text-xs text-text-muted mt-1">Proveedor: {maint.provider} · {maint.km.toLocaleString()} km</p>
-                        {maint.next_due_date && (
-                          <p className="text-xs text-text-secondary mt-0.5">
-                            Proximo: {maint.next_due_date} ({maint.interval_months} meses)
-                          </p>
-                        )}
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <p className="text-sm font-bold text-text-primary">${maint.cost.toLocaleString('es-AR')}</p>
-                        <span className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-medium border ${maint.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${maint.status === 'Completed' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                          {maint.status === 'Completed' ? 'Completado' : 'En Progreso'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {/* Resumen costos */}
-            <div className="mt-4 p-4 bg-brand-light rounded-xl border border-brand-border/40">
-              <h4 className="text-sm font-semibold text-text-primary mb-3">Resumen de Costos</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <p className="text-xs text-text-muted">Total Invertido</p>
-                  <p className="text-lg font-bold text-text-primary">${totalMaintCost.toLocaleString('es-AR')}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-text-muted">Preventivo</p>
-                  <p className="text-lg font-bold text-text-primary">
-                    ${truck.maintenance_history.filter((m: { type: string }) => m.type.includes('Preventivo')).reduce((s: number, m: { cost: number }) => s + m.cost, 0).toLocaleString('es-AR')}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-text-muted">Correctivo</p>
-                  <p className="text-lg font-bold text-text-primary">
-                    ${truck.maintenance_history.filter((m: { type: string }) => m.type.includes('Correctivo')).reduce((s: number, m: { cost: number }) => s + m.cost, 0).toLocaleString('es-AR')}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'routes' && (
-          <div className="space-y-4">
-            <h3 className="text-base font-semibold text-text-primary">Rutas Asignadas</h3>
-            {truck.assigned_routes.length === 0 ? (
-              <div className="text-center py-8">
-                <i className="ri-route-line text-4xl text-text-muted mb-3" />
-                <p className="text-sm text-text-secondary">No hay rutas asignadas</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-brand-border/40">
-                      <th className="text-left text-xs font-medium text-text-muted uppercase px-4 py-3">ID Ruta</th>
-                      <th className="text-left text-xs font-medium text-text-muted uppercase px-4 py-3">Fecha</th>
-                      <th className="text-left text-xs font-medium text-text-muted uppercase px-4 py-3">Conductor</th>
-                      <th className="text-left text-xs font-medium text-text-muted uppercase px-4 py-3">Estado</th>
-                      <th className="text-right text-xs font-medium text-text-muted uppercase px-4 py-3">Visitas</th>
-                      <th className="text-right text-xs font-medium text-text-muted uppercase px-4 py-3">Litros</th>
-                      <th className="text-center text-xs font-medium text-text-muted uppercase px-4 py-3">Accion</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {truck.assigned_routes.map((route: { id: string; date: string; driver_name: string; status: string; visits_count: number; total_liters: number }) => {
-                      const rs = routeStatuses[route.status];
-                      return (
-                        <tr key={route.id} className="border-b border-brand-border/30 hover:bg-brand-light/50 transition-colors">
-                          <td className="px-4 py-3 text-sm font-medium text-text-primary">{route.id}</td>
-                          <td className="px-4 py-3 text-sm text-text-secondary">{route.date}</td>
-                          <td className="px-4 py-3 text-sm text-text-secondary">{route.driver_name}</td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${rs?.color}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${rs?.dot}`} />
-                              {rs?.label}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-sm font-medium text-text-primary text-right">{route.visits_count}</td>
-                          <td className="px-4 py-3 text-sm font-medium text-text-primary text-right">
-                            {route.total_liters > 0 ? `${route.total_liters.toLocaleString()} L` : '-'}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <button
-                              type="button"
-                              onClick={() => navigate(`/routes/${route.id}`)}
-                              className="text-text-muted hover:text-brand-primary transition-colors"
-                            >
-                              <i className="ri-eye-line" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            {/* Resumen de productividad del camion */}
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-4 bg-brand-light rounded-xl border border-brand-border/40">
-                <p className="text-xs text-text-muted">Total Rutas</p>
-                <p className="text-lg font-bold text-text-primary">{truck.assigned_routes.length}</p>
-              </div>
-              <div className="p-4 bg-brand-light rounded-xl border border-brand-border/40">
-                <p className="text-xs text-text-muted">Litros Acumulados</p>
-                <p className="text-lg font-bold text-text-primary">
-                  {truck.assigned_routes.reduce((s: number, r: { total_liters: number }) => s + r.total_liters, 0).toLocaleString()} L
-                </p>
-              </div>
-              <div className="p-4 bg-brand-light rounded-xl border border-brand-border/40">
-                <p className="text-xs text-text-muted">Promedio por Ruta</p>
-                <p className="text-lg font-bold text-text-primary">
-                  {truck.assigned_routes.length > 0
-                    ? Math.round(truck.assigned_routes.reduce((s: number, r: { total_liters: number }) => s + r.total_liters, 0) / truck.assigned_routes.length).toLocaleString()
-                    : 0} L
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'gps' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-text-primary">GPS en Vivo</h3>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border bg-emerald-50 text-emerald-700 border-emerald-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Conectado
-                </span>
-                <span className="text-xs text-text-muted">DEV: {truck.gps_device_id}</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-2 rounded-xl overflow-hidden border border-brand-border/60 h-80">
-                <iframe
-                  title={`Mapa GPS ${truck.plate}`}
-                  width="100%"
-                  height="100%"
-                  style={{ border: 0 }}
-                  loading="lazy"
-                  allowFullScreen
-                  referrerPolicy="no-referrer-when-downgrade"
-                  src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d105073.26479892258!2d-58.41729755!3d-34.61582385!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x95bcca3b4ef90ffd%3A0xe15788b47bca6197!2sBuenos%20Aires%2C%20Argentina!5e0!3m2!1ses!2sus!4v1699999999999"
-                />
-              </div>
-              <div className="space-y-3">
-                <div className="p-4 bg-brand-light rounded-xl border border-brand-border/40">
-                  <div className="flex items-center gap-2 mb-2">
-                    <i className="ri-speed-line text-brand-green" />
-                    <p className="text-xs font-medium text-text-primary">Velocidad Actual</p>
-                  </div>
-                  <p className="text-2xl font-bold text-text-primary">
-                    {truck.status === 'On_Route' ? '42' : '0'} <span className="text-sm font-normal text-text-muted">km/h</span>
-                  </p>
-                  <p className="text-xs text-text-muted mt-1">
-                    {truck.status === 'On_Route' ? 'En movimiento · Av. Corrientes' : 'Detenido'}
-                  </p>
-                </div>
-                <div className="p-4 bg-brand-light rounded-xl border border-brand-border/40">
-                  <div className="flex items-center gap-2 mb-2">
-                    <i className="ri-map-pin-line text-brand-primary" />
-                    <p className="text-xs font-medium text-text-primary">Ubicacion</p>
-                  </div>
-                  <p className="text-sm text-text-secondary">
-                    Av. Corrientes 3456, CABA
-                  </p>
-                  <p className="text-xs text-text-muted mt-1">Actualizado: 21/05 14:32</p>
-                </div>
-                <div className="p-4 bg-brand-light rounded-xl border border-brand-border/40">
-                  <div className="flex items-center gap-2 mb-2">
-                    <i className="ri-route-line text-brand-primary" />
-                    <p className="text-xs font-medium text-text-primary">Ruta Actual</p>
-                  </div>
-                  {inProgressRoutes.length > 0 ? (
-                    <div>
-                      <p className="text-sm font-medium text-text-primary">{inProgressRoutes[0].id}</p>
-                      <p className="text-xs text-text-muted">{inProgressRoutes[0].visits_count} visitas · {inProgressRoutes[0].driver_name}</p>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-text-muted">Sin ruta activa</p>
-                  )}
-                </div>
+                <h3 className="text-base font-semibold text-text-primary">Conductor Asignado</h3>
+                {driver ? (
+                  <div className="flex items-center gap-4 p-4 bg-brand-light rounded-xl border border-brand-border/40"><div className="w-12 h-12 rounded-full bg-brand-primary/10 flex items-center justify-center text-base font-bold text-brand-primary flex-shrink-0">{driver.name.split(' ').map((n) => n[0]).join('')}</div><div className="flex-1 min-w-0"><p className="text-sm font-semibold text-text-primary">{driver.name}</p><p className="text-xs text-text-muted">{driver.dni} · Lic. {driver.license_type}</p></div><button type="button" onClick={() => navigate('/drivers/' + driver.id)} className="text-brand-green text-sm font-medium hover:underline whitespace-nowrap">Ver Perfil →</button></div>
+                ) : (<div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200"><i className="ri-user-line text-xl text-text-muted" /><p className="text-sm text-text-secondary">Sin conductor asignado</p></div>)}
+                {truck.notes && (<div className="pt-2"><h3 className="text-base font-semibold text-text-primary mb-2">Observaciones</h3><p className="text-sm text-text-secondary">{truck.notes}</p></div>)}
               </div>
             </div>
           </div>
@@ -629,241 +183,213 @@ export default function TruckDetailPage() {
         {activeTab === 'documents' && (
           <div className="space-y-4">
             <h3 className="text-base font-semibold text-text-primary">Documentacion</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="p-4 border border-brand-border/40 rounded-xl flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
-                  <i className="ri-file-pdf-line text-red-600 text-lg" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-text-primary">Cedula Verde</p>
-                  <p className="text-xs text-text-muted">{truck.plate} · {truck.year}</p>
-                </div>
-                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${docStatuses.Active.color}`}>
-                  Vigente
-                </span>
-              </div>
-              <div className="p-4 border border-brand-border/40 rounded-xl flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
-                  <i className="ri-file-pdf-line text-red-600 text-lg" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-text-primary">Titulo de Propiedad</p>
-                  <p className="text-xs text-text-muted">VIN: {truck.vin}</p>
-                </div>
-                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${docStatuses.Active.color}`}>
-                  Vigente
-                </span>
-              </div>
-              <div className="p-4 border border-brand-border/40 rounded-xl flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
-                  <i className="ri-file-pdf-line text-red-600 text-lg" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-text-primary">Poliza de Seguro</p>
-                  <p className="text-xs text-text-muted">Vence: {truck.insurance_expiry}</p>
-                </div>
-                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${docStatuses[getDocStatus(truck.insurance_expiry)].color}`}>
-                  {docStatuses[getDocStatus(truck.insurance_expiry)].label}
-                </span>
-              </div>
-              <div className="p-4 border border-brand-border/40 rounded-xl flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
-                  <i className="ri-file-pdf-line text-red-600 text-lg" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-text-primary">Revision Tecnica</p>
-                  <p className="text-xs text-text-muted">Vence: {truck.technical_revision_expiry}</p>
-                </div>
-                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${docStatuses[getDocStatus(truck.technical_revision_expiry)].color}`}>
-                  {docStatuses[getDocStatus(truck.technical_revision_expiry)].label}
-                </span>
-              </div>
-              <div className="p-4 border border-brand-border/40 rounded-xl flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
-                  <i className="ri-file-pdf-line text-red-600 text-lg" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-text-primary">Certificado de Emisiones</p>
-                  <p className="text-xs text-text-muted">{truck.model} · {truck.year}</p>
-                </div>
-                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${docStatuses.Active.color}`}>
-                  Vigente
-                </span>
-              </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 bg-brand-light rounded-lg border border-brand-border/40"><div><p className="text-sm font-medium text-text-primary">Seguro Vehicular</p><p className="text-xs text-text-muted">Vence: {truck.insurance_expiry ? new Date(truck.insurance_expiry).toLocaleDateString('es-AR') : '—'}</p></div><span className={'inline-flex px-2 py-1 rounded-full text-xs font-medium border ' + docStatuses[getDocStatus(truck.insurance_expiry)].color}>{docStatuses[getDocStatus(truck.insurance_expiry)].label}</span></div>
+              <div className="flex items-center justify-between p-3 bg-brand-light rounded-lg border border-brand-border/40"><div><p className="text-sm font-medium text-text-primary">Revision Tecnica</p><p className="text-xs text-text-muted">Vence: {truck.technical_revision_expiry ? new Date(truck.technical_revision_expiry).toLocaleDateString('es-AR') : '—'}</p></div><span className={'inline-flex px-2 py-1 rounded-full text-xs font-medium border ' + docStatuses[getDocStatus(truck.technical_revision_expiry)].color}>{docStatuses[getDocStatus(truck.technical_revision_expiry)].label}</span></div>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'maintenance' && (
+          <div className="text-center py-10"><div className="w-16 h-16 rounded-full bg-brand-light flex items-center justify-center mx-auto mb-4"><i className="ri-tools-line text-3xl text-text-muted" /></div><p className="text-sm font-medium text-text-primary mb-1">Sin datos de mantenimiento</p><p className="text-xs text-text-muted max-w-sm mx-auto">El modulo de mantenimiento se conectara a Supabase en la Fase 7. Por ahora los datos estan en localStorage.</p></div>
+        )}
+
+        {activeTab === 'routes' && (
+          <div className="text-center py-10"><div className="w-16 h-16 rounded-full bg-brand-light flex items-center justify-center mx-auto mb-4"><i className="ri-route-line text-3xl text-text-muted" /></div><p className="text-sm font-medium text-text-primary mb-1">Sin rutas asignadas</p><p className="text-xs text-text-muted max-w-sm mx-auto">Las rutas se vinculan al crear hojas de ruta en la Fase 4.</p></div>
+        )}
+
+        {activeTab === 'gps' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between"><h3 className="text-base font-semibold text-text-primary">GPS en Vivo</h3><span className="text-xs text-text-muted">DEV: {truck.gps_device_id || '—'}</span></div>
+            <div className="rounded-xl overflow-hidden border border-brand-border/60 h-80">
+              <iframe title={'Mapa GPS ' + truck.plate} width="100%" height="100%" style={{ border: 0 }} loading="lazy" allowFullScreen referrerPolicy="no-referrer-when-downgrade" src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d105073.26479892258!2d-58.41729755!3d-34.61582385!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x95bcca3b4ef90ffd%3A0xe15788b47bca6197!2sBuenos%20Aires%2C%20Argentina!5e0!3m2!1ses!2sus!4v1699999999999" /></div>
+          </div>
+        )}
+
+        {activeTab === 'fuel' && (
+          <div className="space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold text-text-primary">Historial de Cargas</h3>
+              <button type="button" onClick={() => navigate('/fuel')} className="text-sm font-medium text-brand-green hover:underline whitespace-nowrap">Ir al modulo de Combustible →</button>
+            </div>
+
+            {fuelLoading ? (
+              <div className="flex items-center justify-center py-10"><div className="w-8 h-8 border-4 border-brand-primary/20 border-t-brand-primary rounded-full animate-spin" /></div>
+            ) : fuelError ? (
+              <div className="text-center py-10"><p className="text-sm text-red-600 mb-3">{fuelError}</p><button type="button" onClick={fetchFuelRecords} className="px-4 py-2 rounded-lg bg-brand-green text-white text-sm font-medium hover:bg-brand-green/90 transition-colors whitespace-nowrap">Reintentar</button></div>
+            ) : fuelRecords.length === 0 ? (
+              <div className="text-center py-10"><div className="w-16 h-16 rounded-full bg-brand-light flex items-center justify-center mx-auto mb-4"><i className="ri-gas-station-line text-3xl text-text-muted" /></div><p className="text-sm font-medium text-text-primary mb-1">Sin cargas registradas</p><p className="text-xs text-text-muted max-w-sm mx-auto">Todavia no se registraron cargas de combustible para este camion. Registralas desde el modulo de Combustible.</p></div>
+            ) : (
+              <>
+                {/* KPIs */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="bg-brand-light rounded-xl p-4 border border-brand-border/40">
+                    <p className="text-xs text-text-muted">Cargas</p>
+                    <p className="text-xl font-bold text-text-primary">{fuelRecords.length}</p>
+                    <p className="text-xs text-text-muted mt-1">Ultima: {new Date(fuelRecords[0].date).toLocaleDateString('es-AR')}</p>
+                  </div>
+                  <div className="bg-brand-light rounded-xl p-4 border border-brand-border/40">
+                    <p className="text-xs text-text-muted">Litros totales</p>
+                    <p className="text-xl font-bold text-text-primary">{fuelRecords.reduce((s, r) => s + r.liters, 0).toLocaleString('es-AR')} L</p>
+                  </div>
+                  <div className="bg-brand-light rounded-xl p-4 border border-brand-border/40">
+                    <p className="text-xs text-text-muted">Gasto total</p>
+                    <p className="text-xl font-bold text-text-primary">${fuelRecords.reduce((s, r) => s + (r.cost || 0), 0).toLocaleString('es-AR')}</p>
+                  </div>
+                  <div className="bg-brand-light rounded-xl p-4 border border-brand-border/40">
+                    <p className="text-xs text-text-muted">Consumo (L/100km)</p>
+                    <p className="text-xl font-bold text-text-primary">
+                      {(() => {
+                        const withL100 = fuelRecords.filter(r => r.consumption_l_per_100km != null);
+                        return withL100.length ? (withL100.reduce((s, r) => s + (r.consumption_l_per_100km || 0), 0) / withL100.length).toFixed(1) + ' L/100km' : '—';
+                      })()}
+                    </p>
+                  </div>
+                  <div className="bg-brand-light rounded-xl p-4 border border-brand-border/40">
+                    <p className="text-xs text-text-muted">Costo/km</p>
+                    <p className="text-xl font-bold text-text-primary">
+                      {(() => {
+                        const withCpk = fuelRecords.filter(r => r.cost_per_km != null);
+                        return withCpk.length ? '$' + (withCpk.reduce((s, r) => s + (r.cost_per_km || 0), 0) / withCpk.length).toFixed(1) + '/km' : '—';
+                      })()}
+                    </p>
+                  </div>
+                  <div className="bg-brand-light rounded-xl p-4 border border-brand-border/40">
+                    <p className="text-xs text-text-muted">Precio promedio</p>
+                    <p className="text-xl font-bold text-text-primary">
+                      {(() => {
+                        const withUp = fuelRecords.filter(r => r.unit_price != null);
+                        return withUp.length ? '$' + (withUp.reduce((s, r) => s + (r.unit_price || 0), 0) / withUp.length).toFixed(0) + '/L' : '—';
+                      })()}
+                    </p>
+                  </div>
+                  <div className="bg-brand-light rounded-xl p-4 border border-brand-border/40">
+                    <p className="text-xs text-text-muted">Km recorridos</p>
+                    <p className="text-xl font-bold text-text-primary">
+                      {(() => {
+                        const km = fuelRecords.reduce((s, r) => s + (r.km_since_last_refuel || 0), 0);
+                        return km > 0 ? km.toLocaleString('es-AR') + ' km' : '—';
+                      })()}
+                    </p>
+                  </div>
+                  <div className="bg-brand-light rounded-xl p-4 border border-brand-border/40">
+                    <p className="text-xs text-text-muted">Odometro actual</p>
+                    <p className="text-xl font-bold text-text-primary">{fuelRecords[0].km_at_refuel.toLocaleString('es-AR')} km</p>
+                  </div>
+                </div>
+
+                {/* Alertas de este vehículo */}
+                {(() => {
+                  const alerts: { type: string; msg: string }[] = [];
+                  const sorted = fuelRecords.slice().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                  const withL100 = sorted.filter(r => r.consumption_l_per_100km != null);
+                  if (withL100.length >= 2) {
+                    const avg = withL100.slice(1).reduce((s, r) => s + (r.consumption_l_per_100km || 0), 0) / (withL100.length - 1);
+                    if (withL100[0].consumption_l_per_100km && avg > 0 && withL100[0].consumption_l_per_100km > avg * 1.2) {
+                      alerts.push({ type: 'high', msg: `Consumo atipico: ${withL100[0].consumption_l_per_100km.toFixed(1)} L/100km (promedio ${avg.toFixed(1)})` });
+                    }
+                  }
+                  if (sorted[0].km_since_last_refuel === null || sorted[0].km_since_last_refuel === 0) {
+                    alerts.push({ type: 'missing', msg: 'Carga mas reciente sin kilometraje recorrido registrado' });
+                  }
+                  for (let i = 0; i < sorted.length - 1; i++) {
+                    if (sorted[i].km_at_refuel < sorted[i + 1].km_at_refuel) {
+                      alerts.push({ type: 'low', msg: `Odometro ${sorted[i].km_at_refuel} km menor a carga anterior (${sorted[i + 1].km_at_refuel} km)` });
+                      break;
+                    }
+                  }
+                  return alerts.length > 0 ? (
+                    <div className="space-y-2">
+                      {alerts.map((a, i) => (
+                        <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-700">
+                          <i className="ri-alert-line" />
+                          <span>{a.msg}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null;
+                })()}
+
+                {/* Evolución mensual */}
+                {(() => {
+                  const map = new Map<string, { month: string; liters: number; cost: number; km: number; count: number }>();
+                  fuelRecords.forEach(r => {
+                    const m = r.date.slice(0, 7);
+                    const e = map.get(m);
+                    if (e) { e.liters += r.liters; e.cost += (r.cost || 0); e.km += (r.km_since_last_refuel || 0); e.count += 1; }
+                    else { map.set(m, { month: m, liters: r.liters, cost: r.cost || 0, km: r.km_since_last_refuel || 0, count: 1 }); }
+                  });
+                  const monthly = Array.from(map.values()).sort((a, b) => a.month.localeCompare(b.month)).slice(-6);
+                  return monthly.length > 1 ? (
+                    <div className="bg-brand-light rounded-xl border border-brand-border/40 p-4">
+                      <h4 className="text-sm font-semibold text-text-primary mb-3">Evolución mensual</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead><tr className="text-left text-xs text-text-muted border-b border-brand-border/60"><th className="px-3 py-2 font-medium">Mes</th><th className="px-3 py-2 font-medium text-right">Cargas</th><th className="px-3 py-2 font-medium text-right">Litros</th><th className="px-3 py-2 font-medium text-right">Gasto</th><th className="px-3 py-2 font-medium text-right">Km</th><th className="px-3 py-2 font-medium text-right">L/100km</th><th className="px-3 py-2 font-medium text-right">$/km</th></tr></thead>
+                          <tbody>
+                            {monthly.map(m => {
+                              const l100 = m.km > 0 ? (m.liters / m.km * 100).toFixed(1) : '—';
+                              const cpk = m.km > 0 ? '$' + (m.cost / m.km).toFixed(1) : '—';
+                              return (
+                                <tr key={m.month} className="border-b border-brand-border/40 last:border-0">
+                                  <td className="px-3 py-2 font-medium">{m.month}</td>
+                                  <td className="px-3 py-2 text-right">{m.count}</td>
+                                  <td className="px-3 py-2 text-right">{m.liters.toLocaleString('es-AR')} L</td>
+                                  <td className="px-3 py-2 text-right">${m.cost.toLocaleString('es-AR')}</td>
+                                  <td className="px-3 py-2 text-right">{m.km > 0 ? m.km.toLocaleString('es-AR') + ' km' : '—'}</td>
+                                  <td className="px-3 py-2 text-right">{l100}</td>
+                                  <td className="px-3 py-2 text-right">{cpk}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
+
+                <div className="overflow-x-auto border border-brand-border/60 rounded-xl">
+                  <table className="w-full text-sm">
+                    <thead><tr className="bg-brand-light text-left text-xs text-text-muted border-b border-brand-border/60"><th className="px-4 py-3 font-medium">Fecha</th><th className="px-4 py-3 font-medium">Estacion</th><th className="px-4 py-3 font-medium text-right">Litros</th><th className="px-4 py-3 font-medium text-right">$/L</th><th className="px-4 py-3 font-medium text-right">Total</th><th className="px-4 py-3 font-medium text-right">Odometro</th><th className="px-4 py-3 font-medium text-right">Km rec.</th><th className="px-4 py-3 font-medium text-right">L/100km</th><th className="px-4 py-3 font-medium text-right">$/km</th></tr></thead>
+                    <tbody>
+                      {fuelRecords.map((r) => (
+                        <tr key={r.id} className="border-b border-brand-border/40 last:border-0 hover:bg-brand-light/50 transition-colors">
+                          <td className="px-4 py-3 font-medium text-text-primary whitespace-nowrap">{new Date(r.date).toLocaleDateString('es-AR')}</td>
+                          <td className="px-4 py-3 text-text-secondary">{r.station || '—'}</td>
+                          <td className="px-4 py-3 text-right text-text-primary">{r.liters.toLocaleString('es-AR')} L</td>
+                          <td className="px-4 py-3 text-right text-text-secondary">{r.unit_price ? `$${r.unit_price.toLocaleString('es-AR')}` : '—'}</td>
+                          <td className="px-4 py-3 text-right text-text-primary">{r.cost ? `$${r.cost.toLocaleString('es-AR')}` : '—'}</td>
+                          <td className="px-4 py-3 text-right text-text-primary">{r.km_at_refuel.toLocaleString('es-AR')} km</td>
+                          <td className="px-4 py-3 text-right text-text-secondary">{r.km_since_last_refuel != null ? r.km_since_last_refuel.toLocaleString('es-AR') + ' km' : '—'}</td>
+                          <td className="px-4 py-3 text-right text-text-primary">{r.consumption_l_per_100km != null ? <span className="font-medium">{r.consumption_l_per_100km} L/100km</span> : '—'}</td>
+                          <td className="px-4 py-3 text-right text-text-secondary">{r.cost_per_km != null ? `$${r.cost_per_km.toFixed(1)}` : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
 
-      {/* Modal: Nuevo Mantenimiento */}
-      {showNewMaint && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-xl border border-brand-border/60 shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-5 border-b border-brand-border/40">
-              <h3 className="text-lg font-semibold text-text-primary">Registrar Nuevo Mantenimiento</h3>
-              <button
-                type="button"
-                onClick={() => setShowNewMaint(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-brand-light text-text-muted transition-colors"
-              >
-                <i className="ri-close-line text-lg" />
-              </button>
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="p-5 border-b border-brand-border/60 flex items-center justify-between"><h3 className="text-base font-semibold text-text-primary">Editar Camion</h3><button type="button" onClick={() => setShowEditModal(false)} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-brand-light transition-colors"><i className="ri-close-line text-lg" /></button></div>
+            <div className="p-5 space-y-4">
+              <div><label className={labelCls}>Patente *</label><input type="text" value={editForm.plate} onChange={(e) => setEditForm((f) => ({ ...f, plate: e.target.value.toUpperCase() }))} className={inputCls} /></div>
+              <div className="grid grid-cols-2 gap-4"><div><label className={labelCls}>Modelo</label><input type="text" value={editForm.model} onChange={(e) => setEditForm((f) => ({ ...f, model: e.target.value }))} className={inputCls} /></div><div><label className={labelCls}>Anio</label><input type="number" value={editForm.year} onChange={(e) => setEditForm((f) => ({ ...f, year: e.target.value }))} className={inputCls} /></div></div>
+              <div className="grid grid-cols-2 gap-4"><div><label className={labelCls}>Capacidad (L)</label><input type="number" value={editForm.capacity_liters} onChange={(e) => setEditForm((f) => ({ ...f, capacity_liters: parseInt(e.target.value) || 0 }))} className={inputCls} /></div><div><label className={labelCls}>Kilometraje Total</label><input type="number" value={editForm.km_total} onChange={(e) => setEditForm((f) => ({ ...f, km_total: parseInt(e.target.value) || 0 }))} className={inputCls} /></div></div>
+              <div><label className={labelCls}>VIN</label><input type="text" value={editForm.vin} onChange={(e) => setEditForm((f) => ({ ...f, vin: e.target.value }))} className={inputCls} /></div>
+              <div><label className={labelCls}>Estado</label><select value={editForm.status} onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))} className={selectCls}>{Object.entries(truckStatuses).map(([k, v]) => (<option key={k} value={k}>{v.label}</option>))}</select></div>
+              <div><label className={labelCls}>Conductor</label><select value={editForm.assigned_driver_id} onChange={(e) => setEditForm((f) => ({ ...f, assigned_driver_id: e.target.value }))} className={selectCls}><option value="">Sin asignar</option>{drivers.filter((d) => d.status === 'Active' || d.status === 'On_Route').map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}</select></div>
+              <div className="grid grid-cols-2 gap-4"><div><label className={labelCls}>Vto. Seguro</label><input type="date" value={editForm.insurance_expiry} onChange={(e) => setEditForm((f) => ({ ...f, insurance_expiry: e.target.value }))} className={inputCls} /></div><div><label className={labelCls}>Vto. RTO</label><input type="date" value={editForm.technical_revision_expiry} onChange={(e) => setEditForm((f) => ({ ...f, technical_revision_expiry: e.target.value }))} className={inputCls} /></div></div>
+              <div><label className={labelCls}>Observaciones</label><textarea value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} rows={3} maxLength={500} className={inputCls + ' resize-none'} /></div>
             </div>
-
-            <div className="p-5 space-y-5">
-              {/* Categoria y Tipo */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-text-muted mb-1.5">Categoria</label>
-                  <select
-                    value={maintForm.category}
-                    onChange={(e) => {
-                      const cat = maintCategories.find((c) => c.value === e.target.value);
-                      setMaintForm({
-                        ...maintForm,
-                        category: e.target.value,
-                        interval_months: cat?.interval || 3,
-                      });
-                    }}
-                    className="w-full px-3 py-2 rounded-lg border border-brand-border text-sm focus:outline-none focus:border-brand-green bg-white"
-                  >
-                    {maintCategories.map((c) => (
-                      <option key={c.value} value={c.value}>{c.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-text-muted mb-1.5">Tipo</label>
-                  <select
-                    value={maintForm.type}
-                    onChange={(e) => setMaintForm({ ...maintForm, type: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-brand-border text-sm focus:outline-none focus:border-brand-green bg-white"
-                  >
-                    <option value="Mantenimiento Preventivo">Mantenimiento Preventivo</option>
-                    <option value="Mantenimiento Correctivo">Mantenimiento Correctivo</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Fecha y Kilometraje */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-text-muted mb-1.5">Fecha del mantenimiento</label>
-                  <input
-                    type="date"
-                    value={maintForm.date}
-                    onChange={(e) => setMaintForm({ ...maintForm, date: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-brand-border text-sm focus:outline-none focus:border-brand-green"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-text-muted mb-1.5">Kilometraje actual</label>
-                  <input
-                    type="number"
-                    value={maintForm.km || ''}
-                    onChange={(e) => setMaintForm({ ...maintForm, km: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-lg border border-brand-border text-sm focus:outline-none focus:border-brand-green"
-                    placeholder="Ej: 125000"
-                  />
-                </div>
-              </div>
-
-              {/* Proveedor y Costo */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-text-muted mb-1.5">Proveedor / Taller</label>
-                  <input
-                    type="text"
-                    value={maintForm.provider}
-                    onChange={(e) => setMaintForm({ ...maintForm, provider: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-brand-border text-sm focus:outline-none focus:border-brand-green"
-                    placeholder="Ej: Mercedes-Benz Argentina"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-text-muted mb-1.5">Costo ($)</label>
-                  <input
-                    type="number"
-                    value={maintForm.cost || ''}
-                    onChange={(e) => setMaintForm({ ...maintForm, cost: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-lg border border-brand-border text-sm focus:outline-none focus:border-brand-green"
-                    placeholder="Ej: 45000"
-                  />
-                </div>
-              </div>
-
-              {/* Alerta: Intervalo */}
-              <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 space-y-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <i className="ri-alarm-warning-line text-amber-600" />
-                  <h4 className="text-sm font-semibold text-amber-700">Configurar alerta de proximo mantenimiento</h4>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-text-muted mb-1.5">Intervalo de alerta (meses)</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={60}
-                      value={maintForm.interval_months}
-                      onChange={(e) => setMaintForm({ ...maintForm, interval_months: Number(e.target.value) })}
-                      className="w-full px-3 py-2 rounded-lg border border-brand-border text-sm focus:outline-none focus:border-brand-green"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-text-muted mb-1.5">Proximo vencimiento calculado</label>
-                    <div className="px-3 py-2 rounded-lg border border-brand-border bg-brand-light text-sm text-text-primary">
-                      {addMonthsToDate(maintForm.date, maintForm.interval_months)}
-                    </div>
-                  </div>
-                </div>
-                <p className="text-xs text-text-secondary">
-                  El sistema calculara automaticamente la fecha del proximo mantenimiento sumando {maintForm.interval_months} meses a la fecha seleccionada.
-                </p>
-              </div>
-
-              {/* Estado y Descripcion */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-text-muted mb-1.5">Estado</label>
-                  <select
-                    value={maintForm.status}
-                    onChange={(e) => setMaintForm({ ...maintForm, status: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-brand-border text-sm focus:outline-none focus:border-brand-green bg-white"
-                  >
-                    <option value="Completed">Completado</option>
-                    <option value="In_Progress">En Progreso</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-text-muted mb-1.5">Descripcion / Detalle</label>
-                <textarea
-                  value={maintForm.description}
-                  onChange={(e) => setMaintForm({ ...maintForm, description: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 rounded-lg border border-brand-border text-sm focus:outline-none focus:border-brand-green resize-none"
-                  placeholder="Ej: Cambio de aceite, filtros, revision de frenos y suspension..."
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 p-5 border-t border-brand-border/40">
-              <button
-                type="button"
-                onClick={() => setShowNewMaint(false)}
-                className="px-4 py-2 rounded-lg border border-brand-border text-sm font-medium text-text-secondary hover:bg-brand-light transition-colors whitespace-nowrap"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveMaintenance}
-                className="px-4 py-2 rounded-lg bg-brand-green text-white text-sm font-medium hover:bg-brand-green/90 transition-colors whitespace-nowrap"
-              >
-                Guardar Mantenimiento
-              </button>
-            </div>
+            <div className="p-5 border-t border-brand-border/60 flex items-center justify-end gap-3"><button type="button" onClick={() => setShowEditModal(false)} className="px-4 py-2 rounded-lg border border-brand-border text-sm font-medium text-text-secondary hover:bg-brand-light transition-colors whitespace-nowrap">Cancelar</button><button type="button" onClick={saveEdit} disabled={saving || !editForm.plate} className={'px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors whitespace-nowrap ' + (saving || !editForm.plate ? 'bg-gray-300 cursor-not-allowed' : 'bg-brand-green hover:bg-brand-green/90')}>{saving ? 'Guardando...' : 'Guardar Cambios'}</button></div>
           </div>
         </div>
       )}

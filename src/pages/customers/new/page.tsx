@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { customerStatuses, customerTypes } from '@/mocks/customers';
-import { mockDrivers } from '@/mocks/drivers';
+import { supabase } from '@/lib/supabase';
+import { customerStatuses, customerTypes } from '@/hooks/useCustomers';
+import { useDrivers } from '@/hooks/useDrivers';
 
 type Contact = { name: string; role: string; phone: string; whatsapp: string; email: string };
 type Branch = { name: string; address: string; schedule: string; containerCount: number; observations: string };
@@ -40,7 +41,9 @@ const labelCls = 'text-xs font-medium text-text-muted uppercase block mb-1.5';
 
 export default function CustomerNewPage() {
   const navigate = useNavigate();
+  const { drivers } = useDrivers();
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('general');
 
   const [form, setForm] = useState({
@@ -121,25 +124,138 @@ export default function CustomerNewPage() {
     if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
       return 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3284.0!2d-58.3816!3d-34.6037!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMzTCsDM2JzAwLjAiUyA1OMKwMjInNDguMCJX!5e0!3m2!1ses!2sar!4v1600000000000';
     }
-    return `https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3284.0!2d${longitude}!3d${latitude}!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMzTCsDM2JzAwLjAiUyA1OMKwMjInNDguMCJX!5e0!3m2!1ses!2sar!4v1600000000000`;
+    return 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3284.0!2d' + longitude + '!3d' + latitude + '!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMzTCsDM2JzAwLjAiUyA1OMKwMjInNDguMCJX!5e0!3m2!1ses!2sar!4v1600000000000';
   }, [form.lat, form.lng]);
 
   const statusOptions = Object.entries(customerStatuses).map(([key, config]) => ({ value: key, label: config.label }));
   const typeOptions = Object.entries(customerTypes).map(([key, config]) => ({ value: key, label: config.label }));
-  const activeDrivers = mockDrivers.filter((d) => d.status === 'Active' || d.status === 'On_Route');
+  const activeDrivers = drivers.filter((d) => d.status === 'Active' || d.status === 'On_Route');
 
   const isValid = form.fantasyName && form.address && form.city && form.phone && form.status;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!isValid) return;
     setSaving(true);
-    setTimeout(() => navigate('/customers'), 800);
+    setSaveError(null);
+
+    try {
+      const addressFirstPart = form.address ? form.address.split(",")[0] : "";
+      const location = form.address ? (form.city || form.province) + ", " + addressFirstPart : form.zone;
+
+      const taxInfo = {
+        business_name: form.businessName,
+        iva_condition: form.ivaCondition,
+        industry: form.industry,
+        category: form.category,
+        email: form.email,
+        joined_at: form.joinedAt,
+        province: form.province,
+        city: form.city,
+        neighborhood: form.neighborhood,
+        zip_code: form.zipCode,
+        lat: form.lat,
+        lng: form.lng,
+        visit_days: form.visitDays,
+        attention_hours: form.attentionHours,
+        recommended_hours: form.recommendedHours,
+        zone: form.zone,
+        habitual_driver_id: form.habitualDriverId,
+        operation_notes: form.operationNotes,
+        uco_payment: form.ucoPayment,
+        payment_method: form.paymentMethod,
+        delivered_products: form.deliveredProducts,
+        agreement: form.agreement,
+        contract: form.contract,
+        notes: form.notes,
+      };
+
+      const { data: customer, error: customerErr } = await supabase
+        .from('customers')
+        .insert({
+          fantasy_name: form.fantasyName,
+          cuit: form.cuit || null,
+          address: form.address,
+          phone: form.phone,
+          location: form.zone || location,
+          status: form.status,
+          type: form.type,
+          tax_info: taxInfo,
+        })
+        .select()
+        .single();
+
+      if (customerErr) throw customerErr;
+      const customerId = customer.id;
+
+      const validContacts = form.contacts.filter((c) => c.name.trim());
+      if (validContacts.length > 0) {
+        const contactRows = validContacts.map((c) => ({
+          customer_id: customerId,
+          name: c.name,
+          role: c.role || null,
+          phone: c.phone || null,
+          email: c.email || null,
+          visible_to_driver: true,
+        }));
+        const { error: contactsErr } = await supabase.from('customer_contacts').insert(contactRows);
+        if (contactsErr) throw contactsErr;
+      }
+
+      const validBranches = form.branches.filter((b) => b.name.trim() || b.address.trim());
+      if (validBranches.length > 0) {
+        const branchRows = validBranches.map((b) => ({
+          customer_id: customerId,
+          address: b.address || b.name,
+          frequency: form.frequency,
+          schedule: b.schedule || null,
+          container_count: b.containerCount || 0,
+          observations: b.observations || null,
+          lat: form.lat ? parseFloat(form.lat) : null,
+          lng: form.lng ? parseFloat(form.lng) : null,
+        }));
+        const { error: branchesErr } = await supabase.from('pickup_points').insert(branchRows);
+        if (branchesErr) throw branchesErr;
+      }
+
+      const validContainers = form.containers.filter((c) => c.quantity > 0);
+      if (validContainers.length > 0) {
+        const containerRows = validContainers.flatMap((c) =>
+          Array.from({ length: c.quantity }, () => ({
+            customer_id: customerId,
+            type: c.type,
+            capacity: c.capacity,
+            status: c.status,
+            location: form.address,
+          }))
+        );
+        const { error: containersErr } = await supabase.from('containers').insert(containerRows);
+        if (containersErr) throw containersErr;
+      }
+
+      navigate('/customers');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Error al guardar el cliente';
+      setSaveError(msg);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  // Summary data
   const summaryContacts = form.contacts.filter((c) => c.name).length;
   const summaryBranches = form.branches.filter((b) => b.name || b.address).length;
   const summaryContainers = form.containers.reduce((sum, c) => sum + (c.quantity || 0), 0);
+
+  const tabActiveCls = 'text-brand-green border-brand-green';
+  const tabInactiveCls = 'text-text-secondary border-transparent hover:text-text-primary';
+  const tabBaseCls = 'px-4 py-3 text-sm font-medium flex items-center gap-2 transition-colors border-b-2 whitespace-nowrap';
+
+  const dayActiveCls = 'bg-brand-green text-white border-brand-green';
+  const dayInactiveCls = 'bg-white text-text-secondary border-brand-border hover:bg-brand-light';
+  const dayBaseCls = 'px-3 py-1.5 rounded-full text-xs font-medium border transition-colors whitespace-nowrap';
+
+  const btnPrimaryCls = 'px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors whitespace-nowrap bg-brand-green hover:bg-brand-green/90';
+  const btnDisabledCls = 'px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors whitespace-nowrap bg-gray-300 cursor-not-allowed';
+  const btnCancelCls = 'px-5 py-2.5 rounded-lg border border-brand-border text-sm font-medium text-text-secondary hover:bg-brand-light transition-colors whitespace-nowrap';
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
@@ -148,8 +264,20 @@ export default function CustomerNewPage() {
         <p className="text-sm text-text-secondary mt-1">Registrar un nuevo cliente con toda su informacion operativa y comercial</p>
       </div>
 
+      {saveError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+          <i className="ri-error-warning-line text-red-500 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-red-700">Error al guardar</p>
+            <p className="text-xs text-red-600 mt-0.5">{saveError}</p>
+          </div>
+          <button type="button" onClick={() => setSaveError(null)} className="text-red-400 hover:text-red-600">
+            <i className="ri-close-line" />
+          </button>
+        </div>
+      )}
+
       <div className="bg-white rounded-xl border border-brand-border/60 overflow-hidden">
-        {/* Tabs nav */}
         <div className="border-b border-brand-border/60 overflow-x-auto">
           <div className="flex min-w-max">
             {tabs.map((tab) => (
@@ -157,9 +285,7 @@ export default function CustomerNewPage() {
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
-                className={`px-4 py-3 text-sm font-medium flex items-center gap-2 transition-colors border-b-2 whitespace-nowrap ${
-                  activeTab === tab.key ? 'text-brand-green border-brand-green' : 'text-text-secondary border-transparent hover:text-text-primary'
-                }`}
+                className={tabBaseCls + ' ' + (activeTab === tab.key ? tabActiveCls : tabInactiveCls)}
               >
                 <i className={tab.icon} />
                 {tab.label}
@@ -363,9 +489,7 @@ export default function CustomerNewPage() {
                       key={day}
                       type="button"
                       onClick={() => toggleVisitDay(day)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors whitespace-nowrap ${
-                        active ? 'bg-brand-green text-white border-brand-green' : 'bg-white text-text-secondary border-brand-border hover:bg-brand-light'
-                      }`}
+                      className={dayBaseCls + ' ' + (active ? dayActiveCls : dayInactiveCls)}
                     >
                       {day}
                     </button>
@@ -403,14 +527,14 @@ export default function CustomerNewPage() {
                   <select value={form.habitualDriverId} onChange={(e) => update('habitualDriverId', e.target.value)} className={selectCls}>
                     <option value="">Sin asignar</option>
                     {activeDrivers.map((d) => (
-                      <option key={d.id} value={d.id}>{d.name} — Lic. {d.license_type}</option>
+                      <option key={d.id} value={d.id}>{d.name} — Lic. {d.license_type || 'N/D'}</option>
                     ))}
                   </select>
                 </div>
               </div>
               <div className="pt-4 border-t border-brand-border/40">
                 <label className={labelCls}>Observaciones operativas</label>
-                <textarea value={form.operationNotes} onChange={(e) => update('operationNotes', e.target.value)} placeholder="Accesos especiales, preferencias de horario, indicaciones para el conductor..." rows={4} maxLength={500} className={`${inputCls} resize-none`} />
+                <textarea value={form.operationNotes} onChange={(e) => update('operationNotes', e.target.value)} placeholder="Accesos especiales, preferencias de horario, indicaciones para el conductor..." rows={4} maxLength={500} className={inputCls + ' resize-none'} />
                 <p className="text-xs text-text-muted mt-1 text-right">{form.operationNotes.length}/500</p>
               </div>
             </div>
@@ -527,9 +651,9 @@ export default function CustomerNewPage() {
                   <button
                     type="button"
                     onClick={() => update('ucoPayment', !form.ucoPayment)}
-                    className={`w-11 h-6 rounded-full transition-colors relative ${form.ucoPayment ? 'bg-brand-green' : 'bg-gray-300'}`}
+                    className={'w-11 h-6 rounded-full transition-colors relative ' + (form.ucoPayment ? 'bg-brand-green' : 'bg-gray-300')}
                   >
-                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${form.ucoPayment ? 'translate-x-5' : ''}`} />
+                    <span className={'absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ' + (form.ucoPayment ? 'translate-x-5' : '')} />
                   </button>
                   <div>
                     <p className="text-sm font-medium text-text-primary">UCO Pago</p>
@@ -628,14 +752,14 @@ export default function CustomerNewPage() {
 
           {/* Actions */}
           <div className="flex items-center justify-end gap-3 pt-2 border-t border-brand-border/40">
-            <button onClick={() => navigate('/customers')} type="button" className="px-5 py-2.5 rounded-lg border border-brand-border text-sm font-medium text-text-secondary hover:bg-brand-light transition-colors whitespace-nowrap">
+            <button onClick={() => navigate('/customers')} type="button" className={btnCancelCls}>
               Cancelar
             </button>
             <button
               onClick={handleSave}
               disabled={!isValid || saving}
               type="button"
-              className={`px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors whitespace-nowrap ${isValid && !saving ? 'bg-brand-green hover:bg-brand-green/90' : 'bg-gray-300 cursor-not-allowed'}`}
+              className={isValid && !saving ? btnPrimaryCls : btnDisabledCls}
             >
               {saving ? (
                 <span className="flex items-center gap-2">

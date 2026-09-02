@@ -1,21 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
 
 interface NavItem {
   path: string;
   label: string;
   icon: string;
+  adminOnly?: boolean;
 }
 
 const mainNavItems: NavItem[] = [
   { path: '/', label: 'Dashboard', icon: 'ri-dashboard-line' },
+  { path: '/messages', label: 'Mensajes', icon: 'ri-message-3-line' },
   { path: '/routes', label: 'Hoja de Ruta', icon: 'ri-route-line' },
   { path: '/routes/templates', label: 'Plantillas', icon: 'ri-stack-line' },
   { path: '/customers', label: 'Clientes', icon: 'ri-building-line' },
-  { path: '/trucks', label: 'Camiones', icon: 'ri-truck-line' },
+  { path: '/trucks', label: 'Camiones', icon: 'ri-truck-line', adminOnly: true },
   { path: '/trucks/maintenance', label: 'Mantenimiento', icon: 'ri-tools-line' },
-  { path: '/drivers', label: 'Conductores', icon: 'ri-user-line' },
-  { path: '/companions', label: 'Acompañantes', icon: 'ri-user-add-line' },
+  { path: '/fuel', label: 'Combustible', icon: 'ri-gas-station-line' },
+  { path: '/drivers', label: 'Conductores', icon: 'ri-user-line', adminOnly: true },
+  { path: '/companions', label: 'Acompañantes', icon: 'ri-user-add-line', adminOnly: true },
   { path: '/equipment', label: 'Equipamiento', icon: 'ri-shirt-line' },
   { path: '/gps', label: 'GPS Tracking', icon: 'ri-map-pin-line' },
   { path: '/reports', label: 'Reportes', icon: 'ri-bar-chart-box-line' },
@@ -23,15 +28,41 @@ const mainNavItems: NavItem[] = [
 ];
 
 const bottomNavItems: NavItem[] = [
-  { path: '/settings', label: 'Configuracion', icon: 'ri-settings-4-line' },
+  { path: '/settings', label: 'Configuracion', icon: 'ri-settings-4-line', adminOnly: true },
 ];
 
 export default function Sidebar() {
+  const { isAdmin } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [unreadChat, setUnreadChat] = useState(0);
+
+  useEffect(() => {
+    const load = async () => {
+      const { count } = await supabase
+        .from('chat_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('sender_role', 'driver')
+        .neq('status', 'read');
+      setUnreadChat(count || 0);
+    };
+    load();
+    const channel = supabase
+      .channel('sidebar-unread-chat')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, () => {
+        load();
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const toggleSidebar = () => setCollapsed(!collapsed);
   const closeMobile = () => setMobileOpen(false);
+
+  const visibleMainItems = mainNavItems.filter(item => !item.adminOnly || isAdmin);
+  const visibleBottomItems = bottomNavItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
     <>
@@ -89,7 +120,7 @@ export default function Sidebar() {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          {mainNavItems.map((item) => (
+          {visibleMainItems.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
@@ -108,6 +139,11 @@ export default function Sidebar() {
               <span className={`whitespace-nowrap transition-all ${collapsed ? 'w-0 opacity-0 hidden' : 'opacity-100'}`}>
                 {item.label}
               </span>
+              {item.path === '/messages' && unreadChat > 0 && (
+                <span className={`ml-auto w-5 h-5 rounded-full bg-brand-green text-white text-[11px] font-semibold flex items-center justify-center flex-shrink-0 ${collapsed ? 'hidden' : ''}`}>
+                  {unreadChat}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -131,7 +167,7 @@ export default function Sidebar() {
               App Conductor
             </span>
           </NavLink>
-          {bottomNavItems.map((item) => (
+          {visibleBottomItems.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}

@@ -12,25 +12,66 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import {
-  dashboardKPIs,
-  weeklyCollectionsData,
-  zoneDistribution,
-  recentRoutes,
-  topDrivers,
-} from '@/mocks/dashboard';
-import { routeStatuses } from '@/mocks/routes';
-import { useSharedMaintenance } from '@/hooks/useSharedMaintenance';
-import { maintenanceCategories, alertStatuses } from '@/mocks/maintenance';
+import { useDashboardData } from '@/hooks/useDashboardData';
+
+const routeStatuses: Record<string, { label: string; color: string }> = {
+  Pending: { label: 'Pendiente', color: 'bg-amber-100 text-amber-700 border-amber-200' },
+  In_Progress: { label: 'En Progreso', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  Completed: { label: 'Completada', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  Canceled: { label: 'Cancelada', color: 'bg-red-100 text-red-700 border-red-200' },
+};
+
+const maintenanceCategories: Record<string, { label: string; icon: string; color: string }> = {
+  oil_change: { label: 'Aceite', icon: 'ri-oil-line', color: 'bg-amber-100 text-amber-700' },
+  battery: { label: 'Bateria', icon: 'ri-battery-line', color: 'bg-sky-100 text-sky-700' },
+  tires: { label: 'Cubiertas', icon: 'ri-car-line', color: 'bg-gray-100 text-gray-700' },
+  brakes: { label: 'Frenos', icon: 'ri-stop-circle-line', color: 'bg-red-100 text-red-700' },
+  itv: { label: 'ITV/RTO', icon: 'ri-file-shield-line', color: 'bg-blue-100 text-blue-700' },
+  insurance: { label: 'Seguro', icon: 'ri-shield-check-line', color: 'bg-green-100 text-green-700' },
+  general: { label: 'General', icon: 'ri-settings-3-line', color: 'bg-purple-100 text-purple-700' },
+};
+
+const alertStatuses: Record<string, { label: string; color: string }> = {
+  Upcoming: { label: 'Proximo', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  Due: { label: 'Vencido', color: 'bg-amber-100 text-amber-700 border-amber-200' },
+  Expired: { label: 'Vencido hace dias', color: 'bg-red-100 text-red-700 border-red-200' },
+  Completed: { label: 'Completado', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+};
 
 const pieColors = ['#1e3a5f', '#2d8a6e', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 export default function Dashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month'>('week');
+  const { kpis, weeklyCollections, zoneDistribution, recentRoutes, topDrivers, maintenanceAlerts, maintSummary, loading, error } = useDashboardData();
 
-  const { getSummary, getUrgentAlerts } = useSharedMaintenance();
-  const maintSummary = getSummary();
-  const urgentAlerts = getUrgentAlerts();
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-brand-primary/20 border-t-brand-primary rounded-full animate-spin" />
+          <p className="text-sm text-text-secondary">Cargando dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md text-center">
+          <i className="ri-error-warning-line text-3xl text-red-500" />
+          <p className="text-sm text-red-700 mt-2">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 whitespace-nowrap"
+            type="button"
+          >
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -69,7 +110,7 @@ export default function Dashboard() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        {dashboardKPIs.map((kpi) => (
+        {kpis.map((kpi) => (
           <div
             key={kpi.id}
             className="bg-white rounded-xl p-4 border border-brand-border/60 hover:border-brand-green/30 transition-colors"
@@ -117,11 +158,11 @@ export default function Dashboard() {
             </Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {urgentAlerts.slice(0, 3).map((alert) => {
-              const cat = maintenanceCategories[alert.category];
-              const status = alertStatuses[alert.status];
-              const now = new Date('2026-05-23');
-              const due = new Date(alert.next_due_date);
+            {maintenanceAlerts.filter(a => a.status === 'Due' || a.status === 'Expired').slice(0, 3).map((alert) => {
+              const cat = maintenanceCategories[alert.category as keyof typeof maintenanceCategories] || { label: alert.category, icon: 'ri-tools-line', color: 'bg-gray-100 text-gray-700' };
+              const status = alertStatuses[alert.status as keyof typeof alertStatuses] || { label: alert.status, color: 'bg-gray-100 text-gray-700' };
+              const now = new Date();
+              const due = new Date(alert.next_due_date + 'T12:00:00');
               const daysDiff = Math.floor((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
               return (
                 <div key={alert.id} className="bg-white rounded-lg p-3 border border-red-100 flex items-start gap-3">
@@ -143,10 +184,10 @@ export default function Dashboard() {
                 </div>
               );
             })}
-            {urgentAlerts.length > 3 && (
+            {maintenanceAlerts.filter(a => a.status === 'Due' || a.status === 'Expired').length > 3 && (
               <div className="bg-white rounded-lg p-3 border border-red-100 flex items-center justify-center">
                 <Link to="/trucks/maintenance" className="text-xs text-red-600 font-medium hover:text-red-800">
-                  +{urgentAlerts.length - 3} alertas mas
+                  +{maintenanceAlerts.filter(a => a.status === 'Due' || a.status === 'Expired').length - 3} alertas mas
                 </Link>
               </div>
             )}
@@ -156,7 +197,6 @@ export default function Dashboard() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Weekly Collections Chart */}
         <div className="lg:col-span-2 bg-white rounded-xl p-5 border border-brand-border/60">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-semibold text-text-primary">Litros Colectados</h3>
@@ -164,7 +204,7 @@ export default function Dashboard() {
           </div>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={weeklyCollectionsData}>
+              <BarChart data={weeklyCollections}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="day" tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} />
@@ -182,7 +222,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Zone Distribution */}
         <div className="bg-white rounded-xl p-5 border border-brand-border/60">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-semibold text-text-primary">Distribucion por Zona</h3>
@@ -231,9 +270,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Bottom Row: Recent Routes + Top Drivers */}
+      {/* Bottom Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Routes */}
         <div className="bg-white rounded-xl border border-brand-border/60 overflow-hidden">
           <div className="flex items-center justify-between p-5 border-b border-brand-border/60">
             <h3 className="text-base font-semibold text-text-primary">Rutas Recientes</h3>
@@ -256,6 +294,13 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
+                {recentRoutes.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-5 py-8 text-center text-sm text-text-muted">
+                      No hay rutas registradas
+                    </td>
+                  </tr>
+                )}
                 {recentRoutes.map((route) => {
                   const statusConfig = routeStatuses[route.status as keyof typeof routeStatuses];
                   return (
@@ -263,7 +308,7 @@ export default function Dashboard() {
                       <td className="px-5 py-3">
                         <div>
                           <p className="text-sm font-medium text-text-primary">{route.name}</p>
-                          <p className="text-xs text-text-muted">{route.id}</p>
+                          <p className="text-xs text-text-muted">{route.id?.toString().slice(0, 8)}</p>
                         </div>
                       </td>
                       <td className="px-5 py-3 text-sm text-text-secondary">{route.driver}</td>
@@ -290,7 +335,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Top Drivers */}
         <div className="bg-white rounded-xl border border-brand-border/60 overflow-hidden">
           <div className="flex items-center justify-between p-5 border-b border-brand-border/60">
             <h3 className="text-base font-semibold text-text-primary">Productividad de Conductores</h3>
@@ -302,6 +346,9 @@ export default function Dashboard() {
             </Link>
           </div>
           <div className="p-5 space-y-4">
+            {topDrivers.length === 0 && (
+              <p className="text-sm text-text-muted text-center py-4">No hay conductores registrados</p>
+            )}
             {topDrivers.map((driver, index) => (
               <div key={driver.name} className="flex items-center gap-4">
                 <div className="w-8 h-8 rounded-full bg-brand-primary/10 flex items-center justify-center text-sm font-bold text-brand-primary flex-shrink-0">

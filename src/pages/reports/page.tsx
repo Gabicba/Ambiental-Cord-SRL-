@@ -10,6 +10,8 @@ import {
   Line,
 } from 'recharts';
 import { monthlyCollectionsData, topDrivers } from '@/mocks/dashboard';
+import { useFuel } from '@/hooks/useFuel';
+import FuelCharts from '@/pages/fuel/components/FuelCharts';
 
 const driverPerformance = [
   { month: 'Ene', carlos: 2800, maria: 3200, juan: 2500, pedro: 2100 },
@@ -21,6 +23,7 @@ const driverPerformance = [
 ];
 
 export default function ReportsPage() {
+  const { chartData } = useFuel();
   return (
     <div className="space-y-4">
       <div>
@@ -102,6 +105,12 @@ export default function ReportsPage() {
             <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-[#ef4444]" /> Pedro</span>
           </div>
         </div>
+      </div>
+
+      {/* Combustible */}
+      <div>
+        <h3 className="text-base font-semibold text-text-primary mb-3">Consumo de Combustible</h3>
+        <FuelCharts chartData={chartData} />
       </div>
 
       {/* Driver Productivity Table */}

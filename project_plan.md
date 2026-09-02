@@ -168,6 +168,35 @@
 - [x] Reminders for replacement
 - [x] Equipment page listing all assignments
 
+### Phase 15: Mensajería Interna Admin ↔ Conductor ✅ (lado web)
+- [x] Sección "Mensajes" en el menú principal del panel administrativo
+- [x] Lista de conversaciones ordenada por actividad reciente (nombre, vehículo, patente, último mensaje, no leídos, estado)
+- [x] Búsqueda por nombre/patente/vehículo y filtros (Todos, No leídos, Activos, En ruta)
+- [x] Conversación 1 a 1 admin ↔ conductor con datos del conductor + hoja de ruta activa
+- [x] Estados de mensaje: Enviado / Entregado / Leído
+- [x] Prioridades: Normal / Importante / Urgente
+- [x] Solicitud de confirmación explícita (confirmar recepción)
+- [x] Respuestas rápidas configurables (chat_quick_replies)
+- [x] Vinculación opcional del mensaje a hoja de ruta
+- [x] Tiempo real con Supabase Realtime (sin polling)
+- [x] Badge de no leídos en el sidebar
+- [ ] Lado conductor (PWA) — a construir en el otro proyecto
+- [ ] Adjuntos (arquitectura preparada)
+- [ ] Mensajes grupales / avisos (futuro)
+- [ ] Detección de movimiento ControlSat (futuro)
+
+### Phase 16: Gestión de Combustible por Vehículo ✅ COMPLETE
+- [x] Tabla `fuel_records` con campos: truck_id, date, liters, cost, km_at_refuel, km_since_last_refuel, consumption_km_per_liter, station, notes
+- [x] RLS, índices, triggers y realtime en fuel_records
+- [x] Hook `useFuel` con CRUD, cálculo automático de consumo (km/L) y resumen por camión
+- [x] Página `/fuel` con dashboard de KPIs (total litros, gasto, consumo promedio, cantidad de registros)
+- [x] Formulario de nueva carga con camión, fecha, litros, costo, km odómetro, estación, notas
+- [x] Cálculo automático de km recorridos y consumo desde la última carga del mismo camión
+- [x] Filtros por camión y período (30/90/365 días / todo)
+- [x] Tabla de registros con todos los datos, ordenados por fecha descendente
+- [x] Tarjetas resumen de consumo por camión
+- [x] Ruta `/fuel` y menú "Combustible" en el sidebar
+
 ## 4. Data Model Design
 
 ### Table: customers
@@ -356,6 +385,51 @@
 | oil_price_per_liter | decimal | Current oil price |
 | updated_at | timestamp | |
 | updated_by | uuid | Admin who updated |
+
+### Table: chat_messages
+| Field | Type | Description |
+|-------|------|-------------|
+| id | uuid | Primary key |
+| driver_id | uuid | FK to drivers (conversación 1:1 admin↔driver) |
+| sender_role | text | 'admin' \| 'driver' |
+| sender_id | uuid | Perfil (admin) o conductor que envió |
+| content | text | Contenido del mensaje |
+| priority | text | normal \| important \| urgent |
+| status | text | sent \| delivered \| read |
+| requires_confirmation | boolean | Solicitar confirmación de recepción |
+| confirmed_at | timestamptz | Cuándo se confirmó |
+| confirmed_by | text | Quién confirmó |
+| attachment_url | text | URL de adjunto (arquitectura preparada) |
+| attachment_type | text | Tipo de adjunto |
+| route_sheet_id | uuid | FK opcional a route_sheets (contexto) |
+| customer_id | uuid | FK opcional a customers (contexto) |
+| truck_id | uuid | FK opcional a trucks (contexto) |
+| visit_id | uuid | FK opcional a route_visits (contexto) |
+| read_at | timestamptz | Cuándo se leyó |
+| created_at | timestamptz | |
+
+### Table: chat_quick_replies
+| Field | Type | Description |
+|-------|------|-------------|
+| id | uuid | Primary key |
+| text | text | Texto de la respuesta rápida |
+| created_by | uuid | FK a profiles (admin que la creó) |
+| created_at | timestamptz | |
+
+### Table: fuel_records
+| Field | Type | Description |
+|-------|------|-------------|
+| id | uuid | Primary key |
+| truck_id | uuid | FK to trucks (required) |
+| date | date | Refuel date |
+| liters | numeric(10,2) | Liters refueled |
+| cost | numeric(12,2) | Total cost |
+| km_at_refuel | integer | Odometer km at refuel |
+| km_since_last_refuel | integer | Km since last refuel (auto) |
+| consumption_km_per_liter | numeric(6,2) | Auto-calculated km/L |
+| station | text | Gas station name |
+| notes | text | Optional notes |
+| created_by | uuid | FK to profiles |
 
 ## 5. Backend / Third-party Integration Plan
 
