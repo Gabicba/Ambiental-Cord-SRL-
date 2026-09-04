@@ -1,8 +1,33 @@
 import { useNavigate } from 'react-router-dom';
-import { mockTrucks, truckStatuses } from '@/mocks/trucks';
+import { useTrucks, truckStatuses } from '@/hooks/useTrucks';
 
 export default function TrucksPage() {
   const navigate = useNavigate();
+  const { trucks, loading, error } = useTrucks();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-brand-primary/20 border-t-brand-primary rounded-full animate-spin" />
+          <p className="text-sm text-text-secondary">Cargando camiones...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md text-center">
+          <i className="ri-error-warning-line text-3xl text-red-500" />
+          <p className="text-sm text-red-700 mt-2">{error}</p>
+          <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 whitespace-nowrap" type="button">Reintentar</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -23,7 +48,12 @@ export default function TrucksPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {mockTrucks.map((truck) => {
+        {trucks.length === 0 && (
+          <div className="col-span-full p-8 text-center">
+            <p className="text-text-muted text-sm">No hay camiones registrados</p>
+          </div>
+        )}
+        {trucks.map((truck) => {
           const statusConfig = truckStatuses[truck.status as keyof typeof truckStatuses];
           return (
             <div
@@ -57,11 +87,11 @@ export default function TrucksPage() {
                 </div>
                 <div>
                   <p className="text-xs text-text-muted">GPS</p>
-                  <p className="text-sm font-medium text-text-primary">{truck.gps_device_id}</p>
+                  <p className="text-sm font-medium text-text-primary">{truck.gps_device_id || 'Sin dispositivo'}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-text-muted">Mantenimiento</p>
-                  <p className="text-sm font-medium text-text-primary">{truck.last_maintenance}</p>
+                  <p className="text-xs text-text-muted">KM</p>
+                  <p className="text-sm font-medium text-text-primary">{truck.km_total.toLocaleString()} km</p>
                 </div>
               </div>
             </div>

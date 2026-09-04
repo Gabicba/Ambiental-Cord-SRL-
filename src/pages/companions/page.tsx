@@ -1,36 +1,13 @@
-import { useState, useEffect, useMemo } from 'react';
-import { mockCompanions } from '@/mocks/companions';
-import type { Companion } from '@/mocks/companions';
-
-const STORAGE_KEY = 'ambiental_companions';
-
-function loadCompanions(): Companion[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as Companion[];
-  } catch { /* ignore */ }
-  return [...mockCompanions];
-}
-
-function saveCompanions(list: Companion[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-  // Also update the in-memory mock array so other pages see changes
-  mockCompanions.length = 0;
-  mockCompanions.push(...list);
-}
-
-function generateId(): string {
-  const next = loadCompanions().length + 1;
-  return `CMP-${String(next).padStart(3, '0')}`;
-}
+import { useState, useMemo } from 'react';
+import { useCompanions, type Companion } from '@/hooks/useCompanions';
 
 export default function CompanionsPage() {
-  const [companions, setCompanions] = useState<Companion[]>(loadCompanions);
+  const { companions, loading, error, createCompanion, updateCompanion, deleteCompanion } = useCompanions();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ full_name: '', dni: '', phone: '' });
 
   const filtered = useMemo(() => {
@@ -39,7 +16,7 @@ export default function CompanionsPage() {
     return companions.filter(
       (c) =>
         c.full_name.toLowerCase().includes(q) ||
-        c.dni.toLowerCase().includes(q) ||
+        (c.dni || '').toLowerCase().includes(q) ||
         (c.phone && c.phone.toLowerCase().includes(q))
     );
   }, [companions, search]);
@@ -51,48 +28,55 @@ export default function CompanionsPage() {
   };
 
   const openEdit = (c: Companion) => {
-    setForm({ full_name: c.full_name, dni: c.dni, phone: c.phone || '' });
+    setForm({ full_name: c.full_name, dni: c.dni || '', phone: c.phone || '' });
     setEditingId(c.id);
     setIsModalOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.full_name.trim() || !form.dni.trim()) return;
-    const list = loadCompanions();
-    if (editingId) {
-      const idx = list.findIndex((c) => c.id === editingId);
-      if (idx >= 0) {
-        list[idx] = {
-          ...list[idx],
-          full_name: form.full_name.trim(),
-          dni: form.dni.trim(),
-          phone: form.phone.trim() || null,
-        };
+    setSaving(true);
+    try {
+      if (editingId) {
+        await updateCompanion(editingId, { full_name: form.full_name.trim(), dni: form.dni.trim(), phone: form.phone.trim() || null });
+      } else {
+        await createCompanion({ full_name: form.full_name.trim(), dni: form.dni.trim(), phone: form.phone.trim() || null });
       }
-    } else {
-      list.push({
-        id: generateId(),
-        full_name: form.full_name.trim(),
-        dni: form.dni.trim(),
-        phone: form.phone.trim() || null,
-        created_at: new Date().toISOString(),
-      });
+      setIsModalOpen(false);
+    } catch {
+      // handled by hook
+    } finally {
+      setSaving(false);
     }
-    saveCompanions(list);
-    setCompanions([...list]);
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    const list = loadCompanions().filter((c) => c.id !== id);
-    saveCompanions(list);
-    setCompanions([...list]);
+  const handleDelete = async (id: string) => {
+    await deleteCompanion(id);
     setConfirmDeleteId(null);
   };
 
-  useEffect(() => {
-    setCompanions(loadCompanions());
-  }, []);
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-brand-primary/20 border-t-brand-primary rounded-full animate-spin" />
+          <p className="text-sm text-text-secondary">Cargando acompañantes...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md text-center">
+          <i className="ri-error-warning-line text-3xl text-red-500" />
+          <p className="text-sm text-red-700 mt-2">{error}</p>
+          <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 whitespace-nowrap" type="button">Reintentar</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -119,7 +103,7 @@ export default function CompanionsPage() {
             <i className="ri-search-line absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
             <input
               type="text"
-              placeholder="Buscar por nombre, DNI o teléfono..."
+              placeholder="Buscar por nombre, DNI o telefono..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-3 py-2 rounded-lg bg-brand-light border border-brand-border text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-green/30"
@@ -136,7 +120,7 @@ export default function CompanionsPage() {
               <tr className="border-b border-brand-border/60 bg-brand-light">
                 <th className="text-left px-4 py-3 font-semibold text-text-primary">Nombre completo</th>
                 <th className="text-left px-4 py-3 font-semibold text-text-primary">DNI</th>
-                <th className="text-left px-4 py-3 font-semibold text-text-primary">Teléfono</th>
+                <th className="text-left px-4 py-3 font-semibold text-text-primary">Telefono</th>
                 <th className="text-right px-4 py-3 font-semibold text-text-primary">Acciones</th>
               </tr>
             </thead>
@@ -187,7 +171,6 @@ export default function CompanionsPage() {
         </div>
       </div>
 
-      {/* Modal Nuevo/Editar */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-xl w-full max-w-md shadow-xl">
@@ -195,68 +178,34 @@ export default function CompanionsPage() {
               <h3 className="text-base font-semibold text-text-primary">
                 {editingId ? 'Editar Acompañante' : 'Nuevo Acompañante'}
               </h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                type="button"
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-brand-light transition-colors"
-              >
+              <button onClick={() => setIsModalOpen(false)} type="button" className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-brand-light transition-colors">
                 <i className="ri-close-line" />
               </button>
             </div>
             <div className="px-5 py-4 space-y-4">
               <div>
                 <label className="text-xs font-medium text-text-muted uppercase">Nombre completo *</label>
-                <input
-                  type="text"
-                  value={form.full_name}
-                  onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
-                  placeholder="Ej: José Luis Fernández"
-                  className="w-full mt-1 px-3 py-2 rounded-lg bg-brand-light border border-brand-border text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-green/30"
-                />
+                <input type="text" value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} placeholder="Ej: Jose Luis Fernandez" className="w-full mt-1 px-3 py-2 rounded-lg bg-brand-light border border-brand-border text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-green/30" />
               </div>
               <div>
                 <label className="text-xs font-medium text-text-muted uppercase">DNI *</label>
-                <input
-                  type="text"
-                  value={form.dni}
-                  onChange={(e) => setForm((f) => ({ ...f, dni: e.target.value }))}
-                  placeholder="Ej: 18.234.567"
-                  className="w-full mt-1 px-3 py-2 rounded-lg bg-brand-light border border-brand-border text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-green/30"
-                />
+                <input type="text" value={form.dni} onChange={(e) => setForm((f) => ({ ...f, dni: e.target.value }))} placeholder="Ej: 18.234.567" className="w-full mt-1 px-3 py-2 rounded-lg bg-brand-light border border-brand-border text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-green/30" />
               </div>
               <div>
-                <label className="text-xs font-medium text-text-muted uppercase">Teléfono</label>
-                <input
-                  type="text"
-                  value={form.phone}
-                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                  placeholder="Ej: +54 11 3456-7890"
-                  className="w-full mt-1 px-3 py-2 rounded-lg bg-brand-light border border-brand-border text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-green/30"
-                />
+                <label className="text-xs font-medium text-text-muted uppercase">Telefono</label>
+                <input type="text" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="Ej: +54 11 3456-7890" className="w-full mt-1 px-3 py-2 rounded-lg bg-brand-light border border-brand-border text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-green/30" />
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-brand-border/60">
-              <button
-                onClick={() => setIsModalOpen(false)}
-                type="button"
-                className="px-4 py-2 rounded-lg border border-brand-border text-sm font-medium text-text-secondary hover:bg-brand-light transition-colors whitespace-nowrap"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSave}
-                type="button"
-                disabled={!form.full_name.trim() || !form.dni.trim()}
-                className="px-4 py-2 rounded-lg bg-brand-primary text-white text-sm font-medium hover:bg-brand-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-              >
-                {editingId ? 'Guardar cambios' : 'Agregar'}
+              <button onClick={() => setIsModalOpen(false)} type="button" className="px-4 py-2 rounded-lg border border-brand-border text-sm font-medium text-text-secondary hover:bg-brand-light transition-colors whitespace-nowrap">Cancelar</button>
+              <button onClick={handleSave} type="button" disabled={!form.full_name.trim() || !form.dni.trim() || saving} className="px-4 py-2 rounded-lg bg-brand-primary text-white text-sm font-medium hover:bg-brand-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap">
+                {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Agregar'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Confirmación eliminar */}
       {confirmDeleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-xl w-full max-w-sm shadow-xl p-5 space-y-4">
@@ -266,24 +215,12 @@ export default function CompanionsPage() {
               </div>
               <div>
                 <h3 className="text-base font-semibold text-text-primary">¿Eliminar acompañante?</h3>
-                <p className="text-xs text-text-secondary mt-0.5">Esta acción no se puede deshacer.</p>
+                <p className="text-xs text-text-secondary mt-0.5">Esta accion no se puede deshacer.</p>
               </div>
             </div>
             <div className="flex items-center justify-end gap-2">
-              <button
-                onClick={() => setConfirmDeleteId(null)}
-                type="button"
-                className="px-4 py-2 rounded-lg border border-brand-border text-sm font-medium text-text-secondary hover:bg-brand-light transition-colors whitespace-nowrap"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => handleDelete(confirmDeleteId)}
-                type="button"
-                className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors whitespace-nowrap"
-              >
-                Eliminar
-              </button>
+              <button onClick={() => setConfirmDeleteId(null)} type="button" className="px-4 py-2 rounded-lg border border-brand-border text-sm font-medium text-text-secondary hover:bg-brand-light transition-colors whitespace-nowrap">Cancelar</button>
+              <button onClick={() => handleDelete(confirmDeleteId)} type="button" className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors whitespace-nowrap">Eliminar</button>
             </div>
           </div>
         </div>

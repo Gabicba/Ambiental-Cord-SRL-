@@ -6,7 +6,7 @@ export interface Companion {
   created_at: string;
 }
 
-const STORAGE_KEY = 'ambiental_companions';
+const STORAGE_KEY = 'logixarg_companions';
 
 function getStoredOrDefault(): Companion[] {
   try {

@@ -22,7 +22,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
           <div className="w-16 h-16 rounded-2xl bg-brand-primary flex items-center justify-center mx-auto mb-4">
             <i className="ri-leaf-line text-3xl text-white" />
           </div>
-          <h1 className="text-xl font-bold text-text-primary">Ambiental Cord</h1>
+          <h1 className="text-xl font-bold text-text-primary">LogixARG</h1>
           <p className="text-sm text-text-muted mt-1">App del Conductor</p>
         </div>
 

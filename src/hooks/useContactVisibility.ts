@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-const STORAGE_KEY = 'ambiental_contact_visibility';
+const STORAGE_KEY = 'logixarg_contact_visibility';
 
 export function getContactVisibilityFromStorage(customerId: string, contactIndex: number): boolean {
   try {

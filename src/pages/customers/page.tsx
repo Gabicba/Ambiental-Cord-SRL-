@@ -1,8 +1,7 @@
-import { useState } from 'react';
-import { mockCustomers, customerStatuses, customerTypes } from '@/mocks/customers';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getContractsByCustomer, refreshContractStatuses } from '@/mocks/contracts';
-import { useEffect } from 'react';
+import { useCustomers, customerStatuses, customerTypes } from '@/hooks/useCustomers';
+import { supabase } from '@/lib/supabase';
 
 type FilterType = 'all' | 'Active' | 'Inactive' | 'Prospect';
 
@@ -10,38 +9,54 @@ export default function CustomersPage() {
   const [filter, setFilter] = useState<FilterType>('all');
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
+  const { customers, loading, error } = useCustomers();
   const [contractAlerts, setContractAlerts] = useState<Record<string, { expiring: number; expired: number; renewalDue: number }>>({});
 
   useEffect(() => {
-    refreshContractStatuses();
-    const alerts: Record<string, { expiring: number; expired: number; renewalDue: number }> = {};
-    mockCustomers.forEach((c) => {
-      const contracts = getContractsByCustomer(c.id);
-      const expiring = contracts.filter((x) => x.status === 'Expiring').length;
-      const expired = contracts.filter((x) => x.status === 'Expired').length;
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const renewalDue = contracts.filter((x) => {
-        if (x.status === 'Renewed') return false;
-        const rd = new Date(x.renewal_date || x.expiration_date);
-        rd.setHours(0, 0, 0, 0);
-        return today.getTime() >= rd.getTime();
-      }).length;
-      if (expiring || expired || renewalDue) {
-        alerts[c.id] = { expiring, expired, renewalDue };
-      }
-    });
-    setContractAlerts(alerts);
-  }, []);
+    const fetchContractAlerts = async () => {
+      try {
+        const { data } = await supabase
+          .from('customer_contracts')
+          .select('customer_id, status, expiration_date, renewal_date');
 
-  const filtered = mockCustomers.filter((c) => {
+        if (!data) return;
+
+        const alerts: Record<string, { expiring: number; expired: number; renewalDue: number }> = {};
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        (data as Array<Record<string, unknown>>).forEach((c) => {
+          const customerId = c.customer_id as string;
+          const status = c.status as string;
+          if (!alerts[customerId]) alerts[customerId] = { expiring: 0, expired: 0, renewalDue: 0 };
+
+          if (status === 'Expiring') alerts[customerId].expiring++;
+          if (status === 'Expired') alerts[customerId].expired++;
+
+          const rd = new Date((c.renewal_date || c.expiration_date) as string);
+          rd.setHours(0, 0, 0, 0);
+          if (status !== 'Renewed' && today.getTime() >= rd.getTime()) {
+            alerts[customerId].renewalDue++;
+          }
+        });
+
+        setContractAlerts(alerts);
+      } catch {
+        // silently ignore
+      }
+    };
+
+    fetchContractAlerts();
+  }, [customers]);
+
+  const filtered = customers.filter((c) => {
     if (filter !== 'all' && c.status !== filter) return false;
     if (search) {
       const q = search.toLowerCase();
       return (
-        c.fantasy_name.toLowerCase().includes(q) ||
-        c.address.toLowerCase().includes(q) ||
-        c.phone.includes(q)
+        (c.fantasy_name || '').toLowerCase().includes(q) ||
+        (c.address || '').toLowerCase().includes(q) ||
+        (c.phone || '').includes(q)
       );
     }
     return true;
@@ -53,6 +68,29 @@ export default function CustomersPage() {
     { key: 'Inactive', label: 'Inactivos' },
     { key: 'Prospect', label: 'Prospectos' },
   ];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-brand-primary/20 border-t-brand-primary rounded-full animate-spin" />
+          <p className="text-sm text-text-secondary">Cargando clientes...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md text-center">
+          <i className="ri-error-warning-line text-3xl text-red-500" />
+          <p className="text-sm text-red-700 mt-2">{error}</p>
+          <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 whitespace-nowrap" type="button">Reintentar</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -159,7 +197,7 @@ export default function CustomersPage() {
                           {contractAlerts[customer.id].renewalDue > 0 && (
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-100 text-rose-700 border border-rose-200">
                               <i className="ri-alarm-warning-line" />
-                              {contractAlerts[customer.id].renewalDue} renovar trámite
+                              {contractAlerts[customer.id].renewalDue} renovar tramite
                             </span>
                           )}
                         </div>

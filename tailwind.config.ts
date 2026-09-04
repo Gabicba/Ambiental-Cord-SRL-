@@ -1,33 +1,113 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-    content: [
-      "./index.html",
-      "./src/**/*.{js,ts,jsx,tsx}",
-    ],
-    theme: {
-      extend: {
-        colors: {
-          brand: {
-            dark: '#1e3a5f',
-            primary: '#1e3a5f',
-            green: '#2d8a6e',
-            accent: '#34d399',
-            light: '#f0f4f1',
-            bg: '#f5f7f5',
-            surface: '#ffffff',
-            border: '#e2e8f0',
-          },
-          text: {
-            primary: '#0f172a',
-            secondary: '#64748b',
-            muted: '#94a3b8',
-          }
+  darkMode: 'class',
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        brand: {
+          dark: '#6C4CFF',
+          primary: '#6C4CFF',
+          green: '#00C2AB',
+          accent: '#00C2AB',
+          light: '#F5F3FF',
+          bg: '#F8F7FC',
+          surface: '#FFFFFF',
+          border: '#E8E5F0',
         },
-        fontFamily: {
-          sans: ['Inter', 'system-ui', 'sans-serif'],
-          serif: ['Playfair Display', 'Georgia', 'serif'],
+        text: {
+          primary: '#1E1B2E',
+          secondary: '#6B6B80',
+          muted: '#9E9EAA',
+        },
+        background: {
+          50: 'oklch(var(--background-50) / <alpha-value>)',
+          100: 'oklch(var(--background-100) / <alpha-value>)',
+          200: 'oklch(var(--background-200) / <alpha-value>)',
+          300: 'oklch(var(--background-300) / <alpha-value>)',
+          400: 'oklch(var(--background-400) / <alpha-value>)',
+          500: 'oklch(var(--background-500) / <alpha-value>)',
+          600: 'oklch(var(--background-600) / <alpha-value>)',
+          700: 'oklch(var(--background-700) / <alpha-value>)',
+          800: 'oklch(var(--background-800) / <alpha-value>)',
+          900: 'oklch(var(--background-900) / <alpha-value>)',
+          950: 'oklch(var(--background-950) / <alpha-value>)',
+        },
+        primary: {
+          50: 'oklch(var(--primary-50) / <alpha-value>)',
+          100: 'oklch(var(--primary-100) / <alpha-value>)',
+          200: 'oklch(var(--primary-200) / <alpha-value>)',
+          300: 'oklch(var(--primary-300) / <alpha-value>)',
+          400: 'oklch(var(--primary-400) / <alpha-value>)',
+          500: 'oklch(var(--primary-500) / <alpha-value>)',
+          600: 'oklch(var(--primary-600) / <alpha-value>)',
+          700: 'oklch(var(--primary-700) / <alpha-value>)',
+          800: 'oklch(var(--primary-800) / <alpha-value>)',
+          900: 'oklch(var(--primary-900) / <alpha-value>)',
+          950: 'oklch(var(--primary-950) / <alpha-value>)',
+        },
+        accent: {
+          50: 'oklch(var(--accent-50) / <alpha-value>)',
+          100: 'oklch(var(--accent-100) / <alpha-value>)',
+          200: 'oklch(var(--accent-200) / <alpha-value>)',
+          300: 'oklch(var(--accent-300) / <alpha-value>)',
+          400: 'oklch(var(--accent-400) / <alpha-value>)',
+          500: 'oklch(var(--accent-500) / <alpha-value>)',
+          600: 'oklch(var(--accent-600) / <alpha-value>)',
+          700: 'oklch(var(--accent-700) / <alpha-value>)',
+          800: 'oklch(var(--accent-800) / <alpha-value>)',
+          900: 'oklch(var(--accent-900) / <alpha-value>)',
+          950: 'oklch(var(--accent-950) / <alpha-value>)',
+        },
+        secondary: {
+          50: 'oklch(var(--secondary-50) / <alpha-value>)',
+          100: 'oklch(var(--secondary-100) / <alpha-value>)',
+          200: 'oklch(var(--secondary-200) / <alpha-value>)',
+          300: 'oklch(var(--secondary-300) / <alpha-value>)',
+          400: 'oklch(var(--secondary-400) / <alpha-value>)',
+          500: 'oklch(var(--secondary-500) / <alpha-value>)',
+          600: 'oklch(var(--secondary-600) / <alpha-value>)',
+          700: 'oklch(var(--secondary-700) / <alpha-value>)',
+          800: 'oklch(var(--secondary-800) / <alpha-value>)',
+          900: 'oklch(var(--secondary-900) / <alpha-value>)',
+          950: 'oklch(var(--secondary-950) / <alpha-value>)',
+        },
+        foreground: {
+          50: 'oklch(var(--foreground-50) / <alpha-value>)',
+          100: 'oklch(var(--foreground-100) / <alpha-value>)',
+          200: 'oklch(var(--foreground-200) / <alpha-value>)',
+          300: 'oklch(var(--foreground-300) / <alpha-value>)',
+          400: 'oklch(var(--foreground-400) / <alpha-value>)',
+          500: 'oklch(var(--foreground-500) / <alpha-value>)',
+          600: 'oklch(var(--foreground-600) / <alpha-value>)',
+          700: 'oklch(var(--foreground-700) / <alpha-value>)',
+          800: 'oklch(var(--foreground-800) / <alpha-value>)',
+          900: 'oklch(var(--foreground-900) / <alpha-value>)',
+          950: 'oklch(var(--foreground-950) / <alpha-value>)',
+        },
+        success: {
+          500: 'oklch(var(--success-500) / <alpha-value>)',
+        },
+        warning: {
+          500: 'oklch(var(--warning-500) / <alpha-value>)',
+        },
+        error: {
+          500: 'oklch(var(--error-500) / <alpha-value>)',
+        },
+        info: {
+          500: 'oklch(var(--info-500) / <alpha-value>)',
         },
       },
+      fontFamily: {
+        sans: ['Poppins', 'system-ui', 'sans-serif'],
+        body: ['Poppins', 'system-ui', 'sans-serif'],
+        heading: ['Poppins', 'system-ui', 'sans-serif'],
+        serif: ['Poppins', 'Georgia', 'serif'],
+      },
     },
-    plugins: [],
-  }
+  },
+  plugins: [],
+}

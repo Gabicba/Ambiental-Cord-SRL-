@@ -1,28 +1,44 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { mockRouteTemplates } from '@/mocks/route_templates';
-import { mockCustomers } from '@/mocks/customers';
+import { useRouteTemplates } from '@/hooks/useRouteTemplates';
 
 export default function RouteTemplatesPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
 
-  const filtered = mockRouteTemplates.filter((t) =>
+  const { templates, loading, error } = useRouteTemplates();
+
+  const filtered = templates.filter((t) =>
     t.name.toLowerCase().includes(search.toLowerCase()) ||
-    t.description.toLowerCase().includes(search.toLowerCase())
+    (t.description || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const getCustomerCount = (ids: string[]) => {
-    return ids.filter((id) => mockCustomers.find((c) => c.id === id)).length;
+  const getCustomerNames = (template: typeof templates[0]) => {
+    return (template.customer_details || []).map(c => c.fantasy_name).slice(0, 3).join(', ');
   };
 
-  const getCustomerNames = (ids: string[]) => {
-    return ids
-      .map((id) => mockCustomers.find((c) => c.id === id)?.fantasy_name)
-      .filter(Boolean)
-      .slice(0, 3)
-      .join(', ');
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-brand-primary/20 border-t-brand-primary rounded-full animate-spin" />
+          <p className="text-sm text-text-secondary">Cargando plantillas...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md text-center">
+          <i className="ri-error-warning-line text-3xl text-red-500" />
+          <p className="text-sm text-red-700 mt-2">{error}</p>
+          <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 whitespace-nowrap" type="button">Reintentar</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -85,13 +101,13 @@ export default function RouteTemplatesPage() {
                 <span className="w-5 h-5 flex items-center justify-center">
                   <i className="ri-map-pin-line text-text-muted text-sm" />
                 </span>
-                <span className="text-sm text-text-secondary">{getCustomerCount(template.customer_ids)} clientes</span>
+                <span className="text-sm text-text-secondary">{template.customer_ids?.length || 0} clientes</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-5 h-5 flex items-center justify-center">
                   <i className="ri-building-line text-text-muted text-sm" />
                 </span>
-                <span className="text-xs text-text-muted truncate">{getCustomerNames(template.customer_ids)}</span>
+                <span className="text-xs text-text-muted truncate">{getCustomerNames(template)}</span>
               </div>
             </div>
 

@@ -53,7 +53,7 @@ export function getEquipmentStatus(replacementDate: string): {
   return { status: 'ok', label: 'Vigente', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', daysLeft };
 }
 
-const STORAGE_KEY = 'ambiental_equipment';
+const STORAGE_KEY = 'logixarg_equipment';
 
 export function loadEquipment(): EmployeeEquipment[] {
   try {

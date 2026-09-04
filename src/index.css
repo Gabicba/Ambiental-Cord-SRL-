@@ -1,16 +1,154 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  html {
-    font-family: 'Inter', system-ui, sans-serif;
+  :root {
+    --font-body: 'Poppins', system-ui, sans-serif;
+    --font-heading: 'Poppins', system-ui, sans-serif;
+    --font-label: 'Poppins', system-ui, sans-serif;
+
+    --background-50: 0.98 0.005 285;
+    --background-100: 0.95 0.01 285;
+    --background-200: 0.92 0.02 285;
+    --background-300: 0.88 0.03 285;
+    --background-400: 0.80 0.04 285;
+    --background-500: 0.72 0.05 285;
+    --background-600: 0.60 0.04 285;
+    --background-700: 0.48 0.03 285;
+    --background-800: 0.36 0.02 285;
+    --background-900: 0.24 0.015 285;
+    --background-950: 0.14 0.01 285;
+
+    --primary-50: 0.96 0.02 285;
+    --primary-100: 0.93 0.04 285;
+    --primary-200: 0.88 0.08 285;
+    --primary-300: 0.80 0.12 285;
+    --primary-400: 0.70 0.18 285;
+    --primary-500: 0.56 0.24 285;
+    --primary-600: 0.48 0.24 285;
+    --primary-700: 0.40 0.22 285;
+    --primary-800: 0.32 0.18 285;
+    --primary-900: 0.25 0.15 285;
+    --primary-950: 0.18 0.10 285;
+
+    --accent-50: 0.97 0.03 185;
+    --accent-100: 0.93 0.06 185;
+    --accent-200: 0.87 0.10 185;
+    --accent-300: 0.80 0.13 185;
+    --accent-400: 0.73 0.15 185;
+    --accent-500: 0.65 0.16 185;
+    --accent-600: 0.55 0.16 185;
+    --accent-700: 0.45 0.14 185;
+    --accent-800: 0.35 0.12 185;
+    --accent-900: 0.25 0.10 185;
+    --accent-950: 0.18 0.07 185;
+
+    --secondary-50: 0.97 0.01 285;
+    --secondary-100: 0.93 0.02 285;
+    --secondary-200: 0.88 0.03 285;
+    --secondary-300: 0.80 0.04 285;
+    --secondary-400: 0.72 0.05 285;
+    --secondary-500: 0.65 0.06 285;
+    --secondary-600: 0.55 0.06 285;
+    --secondary-700: 0.45 0.05 285;
+    --secondary-800: 0.35 0.04 285;
+    --secondary-900: 0.25 0.03 285;
+    --secondary-950: 0.18 0.02 285;
+
+    --foreground-50: 0.98 0.01 285;
+    --foreground-100: 0.95 0.02 285;
+    --foreground-200: 0.90 0.03 285;
+    --foreground-300: 0.82 0.04 285;
+    --foreground-400: 0.72 0.05 285;
+    --foreground-500: 0.62 0.06 285;
+    --foreground-600: 0.52 0.06 285;
+    --foreground-700: 0.42 0.05 285;
+    --foreground-800: 0.32 0.04 285;
+    --foreground-900: 0.22 0.03 285;
+    --foreground-950: 0.12 0.02 285;
+
+    --success-500: 0.68 0.22 145;
+    --warning-500: 0.74 0.18 75;
+    --error-500: 0.63 0.22 25;
+    --info-500: 0.62 0.21 250;
+
+    font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  .dark {
+    --background-50: 0.14 0.01 285;
+    --background-100: 0.18 0.02 285;
+    --background-200: 0.22 0.03 285;
+    --background-300: 0.28 0.04 285;
+    --background-400: 0.36 0.05 285;
+    --background-500: 0.46 0.06 285;
+    --background-600: 0.56 0.06 285;
+    --background-700: 0.68 0.05 285;
+    --background-800: 0.80 0.04 285;
+    --background-900: 0.90 0.03 285;
+    --background-950: 0.96 0.01 285;
+
+    --primary-50: 0.18 0.10 285;
+    --primary-100: 0.25 0.15 285;
+    --primary-200: 0.32 0.18 285;
+    --primary-300: 0.40 0.22 285;
+    --primary-400: 0.48 0.24 285;
+    --primary-500: 0.56 0.24 285;
+    --primary-600: 0.65 0.22 285;
+    --primary-700: 0.75 0.18 285;
+    --primary-800: 0.85 0.14 285;
+    --primary-900: 0.92 0.10 285;
+    --primary-950: 0.96 0.06 285;
+
+    --accent-50: 0.18 0.07 185;
+    --accent-100: 0.25 0.10 185;
+    --accent-200: 0.35 0.12 185;
+    --accent-300: 0.45 0.14 185;
+    --accent-400: 0.55 0.16 185;
+    --accent-500: 0.65 0.16 185;
+    --accent-600: 0.75 0.14 185;
+    --accent-700: 0.85 0.12 185;
+    --accent-800: 0.92 0.10 185;
+    --accent-900: 0.96 0.07 185;
+    --accent-950: 0.98 0.04 185;
+
+    --secondary-50: 0.18 0.02 285;
+    --secondary-100: 0.25 0.03 285;
+    --secondary-200: 0.35 0.04 285;
+    --secondary-300: 0.45 0.05 285;
+    --secondary-400: 0.55 0.06 285;
+    --secondary-500: 0.65 0.06 285;
+    --secondary-600: 0.75 0.05 285;
+    --secondary-700: 0.85 0.04 285;
+    --secondary-800: 0.92 0.03 285;
+    --secondary-900: 0.96 0.02 285;
+    --secondary-950: 0.98 0.01 285;
+
+    --foreground-50: 0.12 0.02 285;
+    --foreground-100: 0.18 0.03 285;
+    --foreground-200: 0.24 0.04 285;
+    --foreground-300: 0.32 0.05 285;
+    --foreground-400: 0.42 0.06 285;
+    --foreground-500: 0.52 0.06 285;
+    --foreground-600: 0.62 0.05 285;
+    --foreground-700: 0.72 0.04 285;
+    --foreground-800: 0.85 0.03 285;
+    --foreground-900: 0.92 0.02 285;
+    --foreground-950: 0.98 0.01 285;
+
+    --success-500: 0.72 0.20 145;
+    --warning-500: 0.76 0.16 75;
+    --error-500: 0.67 0.20 25;
+    --info-500: 0.66 0.19 250;
+  }
+
   body {
-    background-color: #f5f7f5;
-    color: #0f172a;
+    background-color: oklch(var(--background-50));
+    color: oklch(var(--foreground-900));
   }
 }
 

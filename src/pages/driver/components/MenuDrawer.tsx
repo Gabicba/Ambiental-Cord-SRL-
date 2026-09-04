@@ -27,7 +27,7 @@ export default function MenuDrawer({ isOpen, onClose, onNavigate, onLogout }: Me
               <i className="ri-leaf-line text-xl text-white" />
             </div>
             <div>
-              <p className="text-sm font-bold text-text-primary">Ambiental Cord</p>
+              <p className="text-sm font-bold text-text-primary">LogixARG</p>
               <p className="text-xs text-text-muted">App del Conductor</p>
             </div>
           </div>

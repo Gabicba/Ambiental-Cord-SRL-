@@ -20,7 +20,7 @@ export default function ReceiptScreen({ activeVisit, selectedVisit, onContinueRo
     import('jspdf').then(({ jsPDF }) => {
       const doc = new jsPDF();
       doc.setFontSize(18);
-      doc.text('Comprobante de Retiro - Ambiental Cord', 14, 20);
+      doc.text('Comprobante de Retiro - LogixARG', 14, 20);
       doc.setFontSize(12);
       doc.text(`Manifiesto: ${manifestNumber}`, 14, 35);
       doc.text(`Fecha: ${new Date().toLocaleDateString('es-AR')}`, 14, 43);
@@ -40,7 +40,7 @@ export default function ReceiptScreen({ activeVisit, selectedVisit, onContinueRo
       doc.text(`DNI Receptor: ${activeVisit.receiverDni || '-'}`, 14, nextY + 8);
       doc.text(`Observaciones: ${activeVisit.observations || '-'}`, 14, nextY + 16);
       doc.setFontSize(10);
-      doc.text('Ambiental Cord S.R.L. - Gestion de aceite usado', 14, nextY + 32);
+      doc.text('LogixARG S.R.L. - Gestion de aceite usado', 14, nextY + 32);
       doc.save(`Comprobante_${manifestNumber}.pdf`);
       setPdfGenerated(true);
     });
@@ -193,7 +193,7 @@ export default function ReceiptScreen({ activeVisit, selectedVisit, onContinueRo
                   <span className="text-xs text-text-primary">{new Date().toLocaleString('es-AR')}</span>
                 </div>
                 <div className="border-t border-brand-border pt-2 mt-2">
-                  <p className="text-[10px] text-text-muted text-center">Ambiental Cord · Gestion de aceite usado</p>
+                  <p className="text-[10px] text-text-muted text-center">LogixARG · Gestion de aceite usado</p>
                 </div>
               </div>
             </div>
